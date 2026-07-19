@@ -316,6 +316,18 @@ Two distinct operations: >
     :IssueHub search    provider-side, online, provider's own query language
     :IssueHub find      local, offline, across cache AND your notes
 <
+                                                       *issuehub-find-syntax*
+`find` accepts free text, flags, or both: >
+    :IssueHub find eviction
+    :IssueHub find --regex cache.*
+    :IssueHub find --meta priority=high
+    :IssueHub find --meta owner                 " key present at all
+    :IssueHub find --meta tags=cache            " value inside a YAML list
+    :IssueHub find eviction --meta priority=high
+<
+Metadata filters are ANDed and values compare case-insensitively. With filters
+and no text, every known issue is a candidate. The `Find:` prompt behind
+<Plug>(IssueHubFind) accepts exactly the same syntax — one parser serves both.
 `find` covers the cached issue plus memo, metadata, and analysis history, and
 reports which of those matched: >
     PROJ-123  In Progress  Timeout on cache warmup   [memo]

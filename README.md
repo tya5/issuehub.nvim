@@ -470,10 +470,18 @@ export, but never reformats it.
 ### Searching your notes
 
 ```vim
-:IssueHub find eviction          " ranked full-text across everything local
-:IssueHub find "cache.warm"      " a fixed string, not a pattern
-:IssueHub find --regex cache.*   " forces the ripgrep path
+:IssueHub find eviction              " ranked full-text across everything local
+:IssueHub find "cache.warm"          " a fixed string, not a pattern
+:IssueHub find --regex cache.*       " forces the ripgrep path
+
+:IssueHub find --meta priority=high  " filter by metadata
+:IssueHub find --meta owner          " issues where the key is set at all
+:IssueHub find --meta tags=cache     " matches a value inside a YAML list
+:IssueHub find eviction --meta priority=high    " text AND filter
 ```
+
+Filters are ANDed, values are case-insensitive, and the same syntax works in the
+`<Plug>(IssueHubFind)` prompt — one parser serves both, so they cannot drift.
 
 `find` searches the cached issue **and everything you wrote about it** — memo,
 metadata, and analysis history — and tells you which of those matched:

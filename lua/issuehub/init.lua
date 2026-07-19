@@ -122,43 +122,66 @@ function M.search_engine(pattern, opts)
   return "ripgrep"
 end
 
----Local search.
----@param pattern string
+---Local search, with optional metadata filters.
+---
+---Accepts either a plain pattern or a parsed query, so `:IssueHub find` and the
+---`Find:` prompt share one syntax:
+---    find eviction
+---    find --meta priority=high
+---    find eviction --meta priority=high --meta tags=cache
+---@param input string|issuehub.FindQuery
 ---@param opts { regex: boolean? }?
-function M.find(pattern, opts)
+function M.find(input, opts)
   opts = opts or {}
+  local query_mod = require("issuehub.core.query")
+  local query = type(input) == "table" and input or query_mod.parse(input)
+  if opts.regex then
+    query.regex = true
+  end
 
-  if not pattern or vim.trim(pattern) == "" then
+  if query.pattern == "" and #query.meta == 0 then
     return vim.notify("issuehub: nothing to search for", vim.log.levels.WARN)
   end
 
   local search = require("issuehub.core.search")
   local index = require("issuehub.core.index").get()
+  local items
 
-  local items, err
-  if M.search_engine(pattern, opts) == "ripgrep" then
+  if query.pattern == "" then
+    -- Filter-only: every known issue is a candidate.
+    items = index:list()
+  elseif M.search_engine(query.pattern, { regex = query.regex }) == "ripgrep" then
     if search.available() then
-      items, err = search.find(pattern, opts)
+      local err
+      items, err = search.find(query.pattern, { regex = query.regex })
       if err then
         vim.notify("issuehub: " .. err, vim.log.levels.WARN)
-        items = index:search(pattern)
+        items = index:search(query.pattern)
       end
     else
-      local why = opts.regex and "--regex" or "this search"
+      local why = query.regex and "--regex" or "this search"
       vim.notify(
         ("issuehub: %s needs ripgrep, which is not installed — results will be incomplete"):format(why),
         vim.log.levels.WARN
       )
-      items = index:search(pattern)
+      items = index:search(query.pattern)
     end
   else
-    items = index:search(pattern)
+    items = index:search(query.pattern)
   end
 
-  if #items == 0 then
-    return vim.notify("issuehub: no local matches for " .. pattern, vim.log.levels.INFO)
+  if #query.meta > 0 then
+    items = vim.tbl_filter(function(item)
+      return query_mod.matches_meta(item.uri, query.meta)
+    end, items)
   end
-  local view = require("issuehub.ui.view").new({ source = "find", label = "find: " .. pattern, items = items })
+
+  local label = query_mod.describe(query)
+  if #items == 0 then
+    return vim.notify("issuehub: no local matches for " .. label, vim.log.levels.INFO)
+  end
+
+  local view = require("issuehub.ui.view").new({ source = "find", label = "find: " .. label, items = items })
   require("issuehub.ui.picker").pick(view, { title = ("find (%d)"):format(#items) })
 end
 

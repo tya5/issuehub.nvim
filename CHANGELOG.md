@@ -8,6 +8,15 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ## [Unreleased]
 
+### Added
+
+- **Metadata filters for `:IssueHub find`**: `--meta priority=high`,
+  `--meta owner` for a presence test, and `--meta tags=cache` to match a value
+  inside a YAML list. Filters are ANDed and compare case-insensitively, and
+  combine with free text. With filters and no text, every known issue is a
+  candidate. `core/query.lua` parses both the subcommand's arguments and the
+  `Find:` prompt, so the two entry points share one syntax by construction.
+
 ### Fixed
 
 - **`<Plug>(IssueHubFind)` never prompted.** It called `find("")` directly, so

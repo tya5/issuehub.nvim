@@ -52,22 +52,13 @@ local subcommands = {
   end,
 
   find = function(args)
-    local regex = false
-    args = vim.tbl_filter(function(arg)
-      if arg == "--regex" then
-        regex = true
-        return false
-      end
-      return true
-    end, args)
-
-    local pattern = table.concat(args, " ")
-    if pattern == "" then
+    local query = require("issuehub.core.query").parse(args)
+    if query.pattern == "" and #query.meta == 0 then
       return ask("Find: ", function(value)
-        require("issuehub").find(value, { regex = regex })
+        require("issuehub").find(value)
       end)
     end
-    require("issuehub").find(pattern, { regex = regex })
+    require("issuehub").find(query)
   end,
 
   ["local"] = function()
@@ -205,7 +196,8 @@ end, { desc = "issuehub: open picker" })
 
 vim.keymap.set("n", "<Plug>(IssueHubFind)", function()
   -- Prompts, exactly like `:IssueHub find` with no argument. Calling find("")
-  -- here searched for an empty string and silently found nothing.
+  -- here searched for an empty string and silently found nothing. The prompt
+  -- accepts the same syntax as the command, flags included.
   ask("Find: ", function(value)
     require("issuehub").find(value)
   end)
