@@ -13,9 +13,10 @@ local M = {}
 local Redmine = {}
 Redmine.__index = Redmine
 
-function M.new()
+---@param name string?  Instance name; also the URI scheme.
+function M.new(name)
   return setmetatable({
-    name = "redmine",
+    name = name or "redmine",
     http = require("issuehub.util.http"),
     opts = nil,
     ---Maps status id -> is_closed, fetched once from /issue_statuses.json.
@@ -28,7 +29,7 @@ end
 ---@return string? err
 function Redmine:setup(opts)
   if type(opts.url) ~= "string" or opts.url == "" then
-    return false, "providers.redmine.url is required"
+    return false, ("providers.%s.url is required"):format(self.name)
   end
   self.opts = opts
   self.base = putil.base_url(opts.url)
@@ -39,7 +40,7 @@ end
 ---@return issuehub.ProviderCtx
 function Redmine:_ctx()
   return {
-    name = "redmine",
+    name = self.name,
     base = self.base,
     http = self.http,
     auth = function(token)
@@ -61,7 +62,7 @@ function Redmine:_ensure_statuses(cb)
     self.status_closed = {}
     if err then
       -- Non-fatal: fall back to the per-issue is_closed field when present.
-      log.warn("redmine: could not fetch issue statuses:", err)
+      log.warn(self.name .. ": could not fetch issue statuses:", err)
     else
       for _, s in ipairs((body or {}).issue_statuses or {}) do
         self.status_closed[tostring(s.id)] = s.is_closed == true
@@ -107,7 +108,7 @@ function Redmine:_to_issue(raw)
   end
 
   return issue_mod.normalize({
-    provider = "redmine",
+    provider = self.name,
     id = tostring(raw.id),
     title = raw.subject or "",
     -- Redmine bodies are Textile or Markdown depending on an instance setting.

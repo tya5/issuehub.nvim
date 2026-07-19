@@ -62,6 +62,7 @@
 ---@field pick fun(view: issuehub.View, opts: table)
 
 ---@class issuehub.ProviderConfig
+---@field type string?         Implementation to use; defaults to the config key.
 ---@field url string?          Required for jira/redmine; defaults for github/gitlab
 ---@field web_url string?      GitHub Enterprise: browser host, if it differs from the API host
 ---@field user string?
@@ -71,6 +72,7 @@
 ---@field default_query any?
 ---@field comment_limit integer?
 ---@field flavor string?
+---@field http issuehub.HttpConfig?   Per-provider proxy/TLS overrides
 
 ---@class issuehub.Config
 ---@field workspace string
@@ -78,7 +80,26 @@
 ---@field providers table<string, issuehub.ProviderConfig>
 ---@field ui issuehub.UIConfig
 ---@field sync issuehub.SyncConfig
+---@field http issuehub.HttpConfig
 ---@field log_level integer
+
+---@class issuehub.HttpConfig
+---@field proxy string?                    "http://proxy.corp.example:8080"
+---@field no_proxy string?                 "localhost,.internal.example"
+---@field proxy_user string?
+---@field proxy_password (string|fun():string?)?
+---@field proxy_password_env string?
+---@field proxy_password_cmd string[]?
+---@field proxy_auth "basic"|"digest"|"ntlm"|"negotiate"|"anyauth"|nil
+---@field cacert string?                   CA bundle for a corporate root
+---@field capath string?
+---@field ssl_verify boolean?              Default true; false disables verification
+---@field client_cert string?              mTLS
+---@field client_key string?
+---@field client_key_password_env string?
+---@field client_key_password_cmd string[]?
+---@field timeout integer?
+---@field retries integer?
 
 ---@class issuehub.UIConfig
 ---@field picker "auto"|"snacks"|"fzf"|"telescope"|"select"

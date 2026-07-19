@@ -46,12 +46,57 @@ use and delegates:
 
 ## Providers
 
-| Provider | Hosts | Auth | ID form |
-| -------- | ----- | ---- | ------- |
+| Type | Hosts | Auth | ID form |
+| ---- | ----- | ---- | ------- |
 | `jira` | Cloud and Server/DC | API token (Basic) or PAT (Bearer) | `PROJ-123` |
 | `redmine` | self-hosted | `X-Redmine-API-Key` | `12345` |
 | `github` | github.com and Enterprise Server | PAT (Bearer) | `owner/repo#123` |
 | `gitlab` | gitlab.com and self-managed | `PRIVATE-TOKEN` | `group/project#12` |
+
+Any number of instances of each type can be registered — see
+[Multiple servers](#multiple-servers).
+
+### Multiple servers
+
+The config key is an **instance name**, and `type` selects the implementation.
+It defaults to the key, so `jira = { … }` needs no `type` — but any number of
+instances of the same tracker can coexist:
+
+```lua
+providers = {
+  jira = {                       -- type defaults to "jira"
+    url = "https://your-org.atlassian.net",
+    user = "you@example.com",
+    token_env = "JIRA_CLOUD_TOKEN",
+  },
+  jira_internal = {
+    type = "jira",               -- a second Jira, self-hosted
+    url = "https://jira.internal.example",
+    token_env = "JIRA_INTERNAL_TOKEN",
+    http = { no_proxy = "*" },   -- reachable directly, unlike the SaaS one
+  },
+  gitlab_saas = { type = "gitlab", token_env = "GITLAB_COM_TOKEN" },
+  gitlab_internal = {
+    type = "gitlab",
+    url = "https://gitlab.internal.example",
+    token_env = "GITLAB_INTERNAL_TOKEN",
+  },
+}
+```
+
+The instance name becomes the URI scheme and the workspace directory, so the
+same issue key on two servers never collides:
+
+```
+jira://PROJ-123            →  workspace/jira/PROJ-123/
+jira_internal://PROJ-123   →  workspace/jira_internal/PROJ-123/
+```
+
+Each instance has its own credential, its own default query, and its own network
+settings. `:IssueHub open` prompts for the instance when more than one is
+configured.
+
+### Issue IDs
 
 GitHub and GitLab IDs are repository-qualified so one workspace can span many
 repositories. They are percent-encoded on disk
@@ -161,6 +206,92 @@ require("issuehub").setup({
 `workspace` is genuinely required — `setup()` reports an error if it is missing,
 rather than failing later. Keys belonging to unreleased milestones (`backend`,
 `export`) are rejected rather than silently ignored.
+
+### Corporate networks
+
+Behind a proxy, a TLS-inspecting gateway, or both? Everything below is optional —
+with no `http` block, curl already honours `http_proxy`, `https_proxy`, and
+`no_proxy` from your environment, which is what most managed machines set.
+
+```lua
+require("issuehub").setup({
+  workspace = "~/notes/issuehub",
+
+  http = {
+    -- Proxy. Omit to use the environment; set to override it.
+    proxy = "http://proxy.corp.example:8080",
+    no_proxy = "localhost,127.0.0.1,.internal.example",
+
+    -- Authenticating proxy. The password is a credential: keep it out of
+    -- your config the same way you keep tokens out.
+    proxy_user = "DOMAIN\\you",
+    proxy_password_env = "PROXY_PASSWORD",     -- or proxy_password_cmd
+    proxy_auth = "ntlm",                        -- basic|digest|ntlm|negotiate|anyauth
+
+    -- TLS inspection: trust your organisation's root, do NOT disable checking.
+    cacert = "~/certs/corporate-root.pem",
+
+    -- Mutual TLS, if your gateway requires a client certificate.
+    client_cert = "~/certs/client.pem",
+    client_key = "~/certs/client.key",
+    client_key_password_env = "CLIENT_KEY_PASSWORD",
+
+    timeout = 30000,
+    retries = 2,
+  },
+})
+```
+
+**Per-provider overrides.** An internal tracker reached directly while SaaS goes
+through the proxy is the common mixed case:
+
+```lua
+providers = {
+  jira = { url = "https://your-org.atlassian.net", token_env = "JIRA_TOKEN" },
+  redmine = {
+    url = "https://redmine.internal",
+    token_env = "REDMINE_API_KEY",
+    http = { no_proxy = "*" },   -- bypass the proxy for this host only
+  },
+}
+```
+
+#### TLS interception
+
+If your company inspects TLS, requests fail with a certificate error. There are
+two ways out, and they are not equivalent:
+
+```lua
+http = { cacert = "~/certs/corporate-root.pem" }   -- correct
+http = { ssl_verify = false }                       -- last resort
+```
+
+`ssl_verify = false` disables certificate verification **entirely**: your API
+tokens travel over a connection nobody is checking. issuehub accepts it, because
+some internal CAs genuinely cannot be exported, but it will log a warning and
+`:checkhealth issuehub` reports it as an **error** for as long as it is on. Treat
+it as a temporary state, not a setup step.
+
+To find your root certificate:
+
+```sh
+# macOS: export from the System keychain
+security find-certificate -a -c "Your Corp Root" -p \
+  /Library/Keychains/System.keychain > ~/certs/corporate-root.pem
+
+# Linux: it is usually already installed
+ls /etc/ssl/certs/ca-certificates.crt
+```
+
+#### Checking it works
+
+```vim
+:checkhealth issuehub
+```
+
+The **Network** section shows the effective proxy (with any password stripped),
+whether a custom CA is in use, the mTLS state, and `ssl_verify`. Per-provider
+overrides are listed separately, since those are easy to forget about.
 
 ### Credentials
 

@@ -50,6 +50,10 @@ function M.call(ctx, path, opts, cb)
     body = opts.body,
     auth = credentials.auth,
     headers = headers,
+    -- Per-provider proxy/TLS overrides layered on the global block, so an
+    -- internal tracker reached directly and a SaaS one behind the corporate
+    -- proxy can coexist.
+    net = config.net(ctx.name),
   }, function(err, res)
     if err then
       return cb(err, nil, res)

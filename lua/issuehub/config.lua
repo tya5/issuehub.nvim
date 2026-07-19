@@ -20,6 +20,33 @@ local defaults = {
     stale_after = 15 * 60,
   },
 
+  -- Corporate network settings. Every field is optional, and `nil` means "let
+  -- curl decide", which includes honouring http_proxy / https_proxy / no_proxy
+  -- from the environment. Setting `proxy` here overrides the environment.
+  http = {
+    proxy = nil, -- "http://proxy.corp.example:8080"
+    no_proxy = nil, -- "localhost,127.0.0.1,.internal.example"
+    proxy_user = nil, -- password via proxy_password_env / _cmd / function
+    proxy_password_env = nil,
+    proxy_password_cmd = nil,
+    proxy_auth = nil, -- "basic"|"digest"|"ntlm"|"negotiate"|"anyauth"
+
+    -- TLS. A corporate MITM appliance is handled by trusting its root here,
+    -- NOT by turning verification off.
+    cacert = nil, -- path to a CA bundle (PEM)
+    capath = nil, -- directory of hashed CA certs
+    ssl_verify = true, -- false disables verification entirely; see below
+
+    -- Mutual TLS, if the gateway requires a client certificate.
+    client_cert = nil,
+    client_key = nil,
+    client_key_password_env = nil,
+    client_key_password_cmd = nil,
+
+    timeout = 30000, -- ms
+    retries = 2,
+  },
+
   log_level = vim.log.levels.WARN,
 
   -- NOTE: `backend`, `backends`, `export`, and `ui.preview` are deliberately
@@ -62,6 +89,7 @@ end
 local VALID_INDEX = { auto = true, json = true, sqlite = true }
 local VALID_PICKER = { auto = true, snacks = true, fzf = true, telescope = true, select = true }
 local VALID_ON_OPEN = { always = true, stale = true, never = true }
+local VALID_PROXY_AUTH = { basic = true, digest = true, ntlm = true, negotiate = true, anyauth = true }
 
 ---@param opts table
 ---@return string[] errors
@@ -95,16 +123,45 @@ local function validate(opts, raw)
     )
   end
 
+  local http = opts.http or {}
+  if http.proxy_auth ~= nil and not VALID_PROXY_AUTH[http.proxy_auth] then
+    errors[#errors + 1] = ("http.proxy_auth must be one of basic|digest|ntlm|negotiate|anyauth (got %s)"):format(
+      tostring(http.proxy_auth)
+    )
+  end
+  if http.client_cert and not http.client_key then
+    errors[#errors + 1] = "http.client_cert requires http.client_key"
+  end
+  if http.ssl_verify == false then
+    -- Not an error: some internal CAs genuinely cannot be exported. But it must
+    -- never be silent, because it disables MITM protection entirely.
+    require("issuehub.util.log").warn("http.ssl_verify = false: TLS certificate verification is DISABLED")
+  end
+  for _, field in ipairs({ "cacert", "capath", "client_cert", "client_key" }) do
+    local path = http[field]
+    if path and not require("issuehub.util.fs").exists(vim.fn.expand(path)) then
+      errors[#errors + 1] = ("http.%s does not exist: %s"):format(field, path)
+    end
+  end
+
   -- Self-hosted-only providers have no sensible default host; the SaaS ones do.
+  -- Keyed by TYPE, not by instance name: `providers.jira_internal` is still a
+  -- Jira and still needs a url.
   local URL_REQUIRED = { jira = true, redmine = true }
 
   for name, p in pairs(opts.providers) do
     if type(p) ~= "table" then
       errors[#errors + 1] = ("providers.%s must be a table"):format(name)
-    elseif p.url ~= nil and (type(p.url) ~= "string" or p.url == "") then
-      errors[#errors + 1] = ("providers.%s.url must be a non-empty string"):format(name)
-    elseif p.url == nil and URL_REQUIRED[name] then
-      errors[#errors + 1] = ("providers.%s.url is required"):format(name)
+    else
+      local kind = p.type or name
+      if p.type ~= nil and type(p.type) ~= "string" then
+        errors[#errors + 1] = ("providers.%s.type must be a string"):format(name)
+      end
+      if p.url ~= nil and (type(p.url) ~= "string" or p.url == "") then
+        errors[#errors + 1] = ("providers.%s.url must be a non-empty string"):format(name)
+      elseif p.url == nil and URL_REQUIRED[kind] then
+        errors[#errors + 1] = ("providers.%s.url is required"):format(name)
+      end
     end
   end
 
@@ -126,10 +183,69 @@ function M.setup(opts)
   return errors
 end
 
+---Resolve a secret from a `<prefix>` / `<prefix>_cmd` / `<prefix>_env` triple.
+---
+---Shared by provider tokens and proxy passwords: both are credentials, and both
+---must be resolvable from a password manager rather than written in a config
+---file. Order: literal function > command > environment variable.
+---@param source table          Table holding the fields.
+---@param prefix string         e.g. "token", "proxy_password"
+---@param label string          Human-readable location, used in errors.
+---@return string? value
+---@return string? err
+function M.secret(source, prefix, label)
+  local direct = source[prefix]
+
+  -- A literal string is accepted (and documented as discouraged) because
+  -- refusing it silently — as an earlier version did — meant curl fell back to
+  -- prompting interactively, which hangs a headless Neovim.
+  if type(direct) == "string" then
+    if direct == "" then
+      return nil, ("%s.%s is an empty string"):format(label, prefix)
+    end
+    return direct
+  end
+
+  if type(direct) == "function" then
+    local ok, value = pcall(direct)
+    if not ok then
+      return nil, ("%s.%s() failed: %s"):format(label, prefix, tostring(value))
+    end
+    if value and value ~= "" then
+      return value
+    end
+    return nil, ("%s.%s() returned an empty value"):format(label, prefix)
+  end
+
+  local cmd = source[prefix .. "_cmd"]
+  if cmd then
+    local out = vim.system(cmd, { text = true }):wait()
+    if out.code ~= 0 then
+      return nil, ("%s.%s_cmd failed: %s"):format(label, prefix, vim.trim(out.stderr or ""))
+    end
+    local value = vim.trim(out.stdout or "")
+    if value == "" then
+      return nil, ("%s.%s_cmd produced no output"):format(label, prefix)
+    end
+    return value
+  end
+
+  local env = source[prefix .. "_env"]
+  if env then
+    local value = vim.env[env]
+    if not value or value == "" then
+      return nil, ("$%s is not set (%s.%s_env)"):format(env, label, prefix)
+    end
+    return value
+  end
+
+  return nil, ("%s has no %s, %s_cmd, or %s_env"):format(label, prefix, prefix, prefix)
+end
+
 ---Resolve a provider credential.
 ---
----Order: token() > token_cmd > token_env. The value is cached in memory for the
----session and is never logged or persisted.
+---The value is cached in memory for the session and is never logged or
+---persisted.
 ---@param provider string
 ---@return string? token
 ---@return string? err
@@ -143,34 +259,91 @@ function M.token(provider)
     return nil, ("no configuration for provider '%s'"):format(provider)
   end
 
-  local token
-  if type(p.token) == "function" then
-    local ok, value = pcall(p.token)
-    if not ok then
-      return nil, ("providers.%s.token() failed: %s"):format(provider, tostring(value))
-    end
-    token = value
-  elseif p.token_cmd then
-    local out = vim.system(p.token_cmd, { text = true }):wait()
-    if out.code ~= 0 then
-      return nil, ("providers.%s.token_cmd failed: %s"):format(provider, vim.trim(out.stderr or ""))
-    end
-    token = vim.trim(out.stdout or "")
-  elseif p.token_env then
-    token = vim.env[p.token_env]
-    if not token or token == "" then
-      return nil, ("$%s is not set (providers.%s.token_env)"):format(p.token_env, provider)
-    end
-  else
-    return nil, ("providers.%s has no token_env, token_cmd, or token"):format(provider)
-  end
-
-  if not token or token == "" then
-    return nil, ("providers.%s credential resolved to an empty value"):format(provider)
+  local token, err = M.secret(p, "token", "providers." .. provider)
+  if not token then
+    return nil, err
   end
 
   token_cache[provider] = token
   return token
+end
+
+---Network settings for a provider: the global `http` block with the provider's
+---own `http` overriding it.
+---
+---A provider may need different settings from the rest — an internal Redmine
+---reached directly while Jira Cloud goes through the proxy is the common case.
+---@param provider string?
+---@return table net
+function M.net(provider)
+  local base = vim.deepcopy(options.http or {})
+  local p = provider and options.providers[provider]
+  if p and type(p.http) == "table" then
+    base = vim.tbl_deep_extend("force", base, p.http)
+  end
+
+  -- Resolved late and never cached: unlike a provider token this is cheap to
+  -- re-read, and a stale proxy password would fail every request confusingly.
+  if base.proxy_user and (base.proxy_password or base.proxy_password_cmd or base.proxy_password_env) then
+    local password, err = M.secret(base, "proxy_password", "http")
+    if password then
+      base.proxy_password = password
+    else
+      require("issuehub.util.log").warn("proxy password unresolved:", err)
+      base.proxy_password = nil
+    end
+  end
+
+  if base.client_key and (base.client_key_password_cmd or base.client_key_password_env) then
+    local password = M.secret(base, "client_key_password", "http")
+    base.client_key_password = password
+  end
+
+  for _, field in ipairs({ "cacert", "capath", "client_cert", "client_key" }) do
+    if base[field] then
+      base[field] = vim.fn.expand(base[field])
+    end
+  end
+
+  return base
+end
+
+---Human-readable summary of the network configuration, with the proxy password
+---removed. Used by :checkhealth.
+---@param provider string?
+---@return string
+function M.net_summary(provider)
+  local net = M.net(provider)
+  local parts = {}
+
+  if net.proxy then
+    -- A proxy URL may itself embed credentials; strip them before display.
+    parts[#parts + 1] = "proxy=" .. net.proxy:gsub("//[^/@]*@", "//")
+  else
+    local env = vim.env.https_proxy or vim.env.HTTPS_PROXY or vim.env.http_proxy or vim.env.HTTP_PROXY
+    parts[#parts + 1] = env and ("proxy=" .. env:gsub("//[^/@]*@", "//") .. " (from environment)") or "proxy=none"
+  end
+
+  -- Shown even though it is not a credential: "why is this host still going
+  -- through the proxy" is a common thing to diagnose.
+  if net.no_proxy then
+    parts[#parts + 1] = "no_proxy=" .. net.no_proxy
+  end
+  if net.proxy_user then
+    parts[#parts + 1] = ("proxy_auth=%s as %s"):format(net.proxy_auth or "basic", net.proxy_user)
+  end
+  if net.cacert then
+    parts[#parts + 1] = "cacert=" .. net.cacert
+  end
+  if net.capath then
+    parts[#parts + 1] = "capath=" .. net.capath
+  end
+  if net.client_cert then
+    parts[#parts + 1] = "mTLS=on"
+  end
+  parts[#parts + 1] = "ssl_verify=" .. tostring(net.ssl_verify ~= false)
+
+  return table.concat(parts, ", ")
 end
 
 ---Whether a credential can be resolved, without revealing it. Used by health.

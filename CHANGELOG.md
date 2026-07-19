@@ -28,11 +28,38 @@ This project is pre-1.0: the public API may break between minor versions until
   exercise the RFC 3986 path encoding.
 - `provider/util.lua`, shared request and auth plumbing, extracted once there
   were four providers repeating it.
+- **Multiple instances of the same provider type.** The config key is now an
+  instance name and `providers.<name>.type` selects the implementation
+  (defaulting to the key), so a Jira Cloud and a self-hosted Jira — or two
+  GitLabs — can be registered side by side. The instance name is the URI scheme,
+  credential key, network-settings key, and workspace directory, so the same
+  issue key on two servers never collides.
+- **Corporate network support** via a new `http` config block: proxy (with
+  NTLM/negotiate/digest auth), `no_proxy`, custom CA bundle, mutual TLS, and
+  `ssl_verify`. Every field is optional; with none set, curl still honours
+  `http_proxy` / `https_proxy` / `no_proxy` from the environment. Settings can be
+  overridden per provider, for the common case of an internal tracker reached
+  directly while SaaS goes through the proxy.
+  - Proxy passwords and client-key passphrases are handled exactly like API
+    tokens — resolved from env or a command, passed on stdin, never in argv.
+  - `ssl_verify = false` is accepted but warns at setup and is reported as an
+    **error** by `:checkhealth`; `cacert` is the supported answer to TLS
+    interception.
+  - `:checkhealth issuehub` gained a Network section showing the effective
+    settings with credentials stripped.
 
 ### Changed
 
 - `providers.<name>.url` is now required only for Jira and Redmine. GitHub and
   GitLab default to their SaaS hosts.
+
+### Fixed
+
+- A literal string credential (`proxy_password = "..."`) was silently discarded,
+  because the resolver only accepted a function, `_cmd`, or `_env`. curl then
+  fell back to prompting for the password interactively, which hangs a headless
+  Neovim. Literal strings are now accepted, and a proxy user without a resolved
+  password emits an empty password rather than triggering the prompt.
 
 Planned next: the Workspace overlay — memo, metadata, and prompt as editable
 buffer regions with `:w` writeback (0.2). See §22 of [DESIGN.md](DESIGN.md).

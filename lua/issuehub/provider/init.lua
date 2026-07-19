@@ -31,23 +31,44 @@ function M.register(name, provider)
   configured[name] = false
 end
 
+---The implementation backing a configured provider.
+---
+---`providers.<name>.type` selects it, defaulting to the name itself. That
+---indirection is what allows two instances of the same tracker — a Jira Cloud
+---and an internal Jira Server, say — to be registered side by side under
+---distinct names, each with its own URI scheme and workspace directory.
 ---@param name string
+---@return string
+function M.type_of(name)
+  local opts = require("issuehub.config").get().providers[name]
+  return (opts and opts.type) or name
+end
+
+---@param name string  Instance name, which is also the URI scheme.
 ---@return issuehub.Provider? provider
 ---@return string? err
 function M.get(name)
   if not registry[name] then
-    local module = BUILTIN[name]
+    local kind = M.type_of(name)
+    local module = BUILTIN[kind]
     if not module then
-      if PLANNED[name] then
-        return nil, ("provider '%s' is not implemented yet (planned for %s)"):format(name, PLANNED[name])
+      if PLANNED[kind] then
+        return nil, ("provider type '%s' is not implemented yet (planned for %s)"):format(kind, PLANNED[kind])
       end
-      return nil, ("unknown provider '%s' (available: %s)"):format(name, table.concat(vim.tbl_keys(BUILTIN), ", "))
+      return nil,
+        ("unknown provider type '%s' for '%s' (available: %s)"):format(
+          kind,
+          name,
+          table.concat(vim.tbl_keys(BUILTIN), ", ")
+        )
     end
     local ok, impl = pcall(require, module)
     if not ok then
       return nil, ("failed to load provider '%s': %s"):format(name, impl)
     end
-    registry[name] = impl.new()
+    -- The instance name is passed in: it is the URI scheme this provider must
+    -- stamp on its issues, and the key its credential is configured under.
+    registry[name] = impl.new(name)
   end
 
   local provider = registry[name]
@@ -83,10 +104,20 @@ function M.resolve(uri)
   return provider, id
 end
 
----Names of every provider present in the user's configuration.
+---Names of every provider instance present in the user's configuration.
 ---@return string[]
 function M.configured_names()
-  return vim.tbl_keys(require("issuehub.config").get().providers)
+  local names = vim.tbl_keys(require("issuehub.config").get().providers)
+  table.sort(names)
+  return names
+end
+
+---Implementation types available for `providers.<name>.type`.
+---@return string[]
+function M.available_types()
+  local types = vim.tbl_keys(BUILTIN)
+  table.sort(types)
+  return types
 end
 
 ---Drop cached instances. Called on setup() and by tests.

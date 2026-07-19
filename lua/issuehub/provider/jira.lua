@@ -13,10 +13,11 @@ Jira.__index = Jira
 
 local FIELDS = "summary,description,status,assignee,reporter,labels,created,updated"
 
-function M.new()
+---@param name string?  Instance name; also the URI scheme. Defaults to "jira".
+function M.new(name)
   -- `http` is injectable so specs can substitute a fake transport (§20).
   return setmetatable({
-    name = "jira",
+    name = name or "jira",
     http = require("issuehub.util.http"),
     opts = nil,
     flavor = nil,
@@ -28,7 +29,7 @@ end
 ---@return string? err
 function Jira:setup(opts)
   if type(opts.url) ~= "string" or opts.url == "" then
-    return false, "providers.jira.url is required"
+    return false, ("providers.%s.url is required"):format(self.name or "jira")
   end
   self.opts = opts
   self.base = opts.url:gsub("/+$", "")
@@ -41,7 +42,7 @@ end
 ---@return issuehub.HttpAuth? auth
 ---@return string? err
 function Jira:_auth()
-  local token, err = config.token("jira")
+  local token, err = config.token(self.name)
   if not token then
     return nil, err
   end
@@ -89,6 +90,9 @@ function Jira:_call(path, opts, cb)
     body = opts.body,
     auth = auth,
     headers = { Accept = "application/json" },
+    -- Per-instance proxy/TLS overrides, same as the providers built on
+    -- provider/util.lua.
+    net = config.net(self.name),
   }, function(rerr, res)
     if rerr then
       return cb(rerr)
@@ -108,8 +112,8 @@ function Jira:_to_issue(raw)
   local status = f.status or {}
 
   return issue_mod.normalize({
-    uri = issue_mod.uri("jira", raw.key),
-    provider = "jira",
+    uri = issue_mod.uri(self.name, raw.key),
+    provider = self.name,
     id = raw.key,
     title = f.summary or "",
     -- Cloud returns ADF, Server returns wiki-markup text. adf.to_markdown
@@ -203,7 +207,7 @@ function Jira:health()
   if not self.opts then
     return false, "not configured"
   end
-  local ok, msg = config.token_status("jira")
+  local ok, msg = config.token_status(self.name)
   if not ok then
     return false, msg
   end

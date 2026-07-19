@@ -41,6 +41,47 @@ local function check_binaries()
   end
 end
 
+local function check_network()
+  h.start("Network")
+
+  local config = require("issuehub.config")
+  local net = config.net(nil)
+
+  h.info(config.net_summary(nil))
+
+  if net.ssl_verify == false then
+    h.error("TLS certificate verification is DISABLED (http.ssl_verify = false)", {
+      "Every request is vulnerable to interception, including your API tokens.",
+      "Prefer trusting your organisation's root CA instead:",
+      "  http = { cacert = '/path/to/corporate-root.pem' }",
+    })
+  elseif net.cacert or net.capath then
+    h.ok("using a custom CA bundle with verification enabled")
+  end
+
+  if net.proxy_user and not net.proxy_password then
+    h.warn("http.proxy_user is set but no password resolved", {
+      "Set proxy_password_env, proxy_password_cmd, or proxy_password.",
+    })
+  end
+
+  if net.client_cert then
+    if net.client_key then
+      h.ok("client certificate configured (mTLS)")
+    else
+      h.error("http.client_cert is set without http.client_key")
+    end
+  end
+
+  -- A per-provider override is easy to forget about; list any that differ.
+  for name in pairs(config.get().providers) do
+    local p = config.get().providers[name]
+    if type(p.http) == "table" and not vim.tbl_isempty(p.http) then
+      h.info(("%s overrides network settings: %s"):format(name, config.net_summary(name)))
+    end
+  end
+end
+
 local function check_workspace()
   h.start("Workspace")
 
@@ -152,6 +193,7 @@ end
 function M.check()
   check_neovim()
   check_binaries()
+  check_network()
   check_workspace()
   check_index()
   check_providers()

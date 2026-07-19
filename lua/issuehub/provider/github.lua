@@ -13,9 +13,10 @@ local M = {}
 local GitHub = {}
 GitHub.__index = GitHub
 
-function M.new()
+---@param name string?  Instance name; also the URI scheme.
+function M.new(name)
   return setmetatable({
-    name = "github",
+    name = name or "github",
     http = require("issuehub.util.http"),
     opts = nil,
   }, GitHub)
@@ -40,7 +41,7 @@ end
 ---@return issuehub.ProviderCtx
 function GitHub:_ctx()
   return {
-    name = "github",
+    name = self.name,
     base = self.base,
     http = self.http,
     auth = function(token)
@@ -111,7 +112,7 @@ function GitHub:_to_issue(raw)
   end
 
   return issue_mod.normalize({
-    provider = "github",
+    provider = self.name,
     id = ("%s#%s"):format(repo, raw.number),
     title = raw.title or "",
     description = raw.body or "", -- already Markdown
@@ -173,7 +174,7 @@ end
 function GitHub:get(id, cb)
   local repo, number = split_id(id)
   if not repo then
-    return cb(("github: id must be owner/repo#number (got '%s')"):format(id))
+    return cb(("%s: id must be owner/repo#number (got '%s')"):format(self.name, id))
   end
 
   putil.call(self:_ctx(), ("/repos/%s/issues/%s"):format(repo, number), nil, function(err, raw)

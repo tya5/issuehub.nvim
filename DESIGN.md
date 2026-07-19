@@ -579,7 +579,26 @@ Rules:
 - `list()` may return partial issues (no `comments`/`description`) for speed;
   `get()` must return complete ones. The picker only needs `list()` fields.
 
-### 7.1 Shipped providers
+### 7.1 Instances vs types
+
+A configured provider is an **instance**. `providers.<name>.type` chooses the
+implementation and defaults to `<name>`, so the common single-server case stays
+`providers.jira = { … }` while a second Jira is just another key:
+
+```lua
+jira          = { url = "https://org.atlassian.net", … }   -- type = "jira"
+jira_internal = { type = "jira", url = "https://jira.internal", … }
+```
+
+The instance name — not the type — is the URI scheme, the credential key, the
+network-settings key, and the workspace directory. That is what keeps
+`jira://PROJ-123` and `jira_internal://PROJ-123` from colliding on disk, which is
+the whole point: two servers routinely use the same issue keys.
+
+Providers therefore never hardcode their own name. `M.new(name)` receives the
+instance name and stamps it on every Issue it produces.
+
+### 7.2 Shipped providers
 
 | Provider | Hosts | Auth | ID form | `closed` derived from |
 | -------- | ----- | ---- | ------- | --------------------- |
@@ -667,7 +686,42 @@ http.request({
 - Retry with backoff on 429/5xx, honoring `Retry-After`.
 - Concurrency is capped (default 6) to avoid hammering the API on bulk sync.
 
-Health check verifies `curl` is present and reports its version.
+### 8.1 Corporate networks
+
+Everything an enterprise deployment needs is a curl config-file concern, which is
+why §8's stdin channel was worth building even before there was a proxy to
+configure:
+
+| Concern | Config | curl |
+| ------- | ------ | ---- |
+| Proxy | `http.proxy`, `http.no_proxy` | `proxy`, `noproxy` |
+| Proxy auth | `http.proxy_user` + password, `http.proxy_auth` | `proxy-user`, `proxy-ntlm` … |
+| TLS interception | `http.cacert`, `http.capath` | `cacert`, `capath` |
+| Mutual TLS | `http.client_cert`, `http.client_key` | `cert`, `key`, `pass` |
+| Verification off | `http.ssl_verify = false` | `insecure` |
+
+Rules:
+
+- **Omitting a setting means "let curl decide."** With no `http` block at all,
+  curl honours `http_proxy` / `https_proxy` / `no_proxy` from the environment,
+  which is what managed machines already set. issuehub does not re-implement that
+  precedence.
+- **Proxy passwords and key passphrases are credentials** and go through the same
+  resolver as provider tokens (`config.secret`): literal, command, or env, then
+  stdin — never argv.
+- **Settings merge per provider.** `providers.<name>.http` overrides the global
+  block, because an internal tracker reached directly alongside SaaS behind a
+  proxy is the normal mixed case, not an exotic one.
+- **A proxy user always emits `user:password`,** with an empty password if none
+  resolved. A bare user makes curl prompt on the terminal, which hangs a headless
+  Neovim rather than failing.
+- **`ssl_verify = false` is accepted but never silent.** It warns at `setup()`
+  and `:checkhealth` reports it as an error while enabled. The supported answer
+  to TLS interception is `cacert`, which keeps verification on.
+
+Health check verifies `curl` is present and reports its version, and the Network
+section reports the effective proxy (credentials stripped), CA bundle, mTLS
+state, verification setting, and any per-provider override.
 
 ---
 

@@ -13,9 +13,10 @@ local M = {}
 local GitLab = {}
 GitLab.__index = GitLab
 
-function M.new()
+---@param name string?  Instance name; also the URI scheme.
+function M.new(name)
   return setmetatable({
-    name = "gitlab",
+    name = name or "gitlab",
     http = require("issuehub.util.http"),
     opts = nil,
   }, GitLab)
@@ -36,7 +37,7 @@ end
 ---@return issuehub.ProviderCtx
 function GitLab:_ctx()
   return {
-    name = "gitlab",
+    name = self.name,
     base = self.base,
     http = self.http,
     auth = function(token)
@@ -73,7 +74,7 @@ function GitLab:_to_issue(raw)
   local closed = state == "closed"
 
   return issue_mod.normalize({
-    provider = "gitlab",
+    provider = self.name,
     id = ("%s#%s"):format(project, raw.iid),
     title = raw.title or "",
     description = raw.description or "", -- already Markdown
@@ -138,7 +139,7 @@ end
 function GitLab:get(id, cb)
   local project, iid = split_id(id)
   if not project then
-    return cb(("gitlab: id must be group/project#iid (got '%s')"):format(id))
+    return cb(("%s: id must be group/project#iid (got '%s')"):format(self.name, id))
   end
 
   -- The project path must be URL-encoded into a single segment: GitLab's API

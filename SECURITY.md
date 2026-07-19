@@ -20,6 +20,9 @@ explicitly:
 - Tokens are **never passed in argv**. They reach curl through a config file on
   **stdin** (`--config -`), so they are not visible to `ps` or other users on a
   shared machine.
+- **Proxy passwords and client-key passphrases** are treated exactly like API
+  tokens: resolved from an env var or a command, delivered on stdin, never in
+  argv. `:checkhealth` strips credentials from the proxy URL before showing it.
 - Tokens are **redacted from the log file unconditionally**, with no opt-out
   (`lua/issuehub/util/log.lua`). Redaction is covered by specs.
 - `:checkhealth issuehub` reports whether a credential *resolves*, never its
@@ -27,6 +30,19 @@ explicitly:
 
 If you find a path where a credential reaches disk, argv, a log, or a buffer,
 that is a vulnerability — please report it.
+
+## TLS verification
+
+`http.ssl_verify = false` disables certificate verification for every request,
+which means API tokens travel over a connection nobody is authenticating. It
+exists because some corporate CAs cannot be exported, but:
+
+- it logs a warning at `setup()`,
+- `:checkhealth issuehub` reports it as an **error** while it is enabled,
+- and the supported alternative is `http.cacert`, which keeps verification on
+  while trusting your organisation's root.
+
+If you are running with it enabled, treat it as an open issue, not a setting.
 
 ## Things worth knowing
 
