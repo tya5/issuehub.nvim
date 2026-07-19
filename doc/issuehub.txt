@@ -324,8 +324,15 @@ provider's query versus everything already local. In both, your memo and
 metadata ride along on each row as hidden match text, so typing a word that
 appears only in your notes still narrows the list. Neither prompts.
 
-`:IssueHub find {query}` is the precise form, and reaches analysis history and
-regexes that a picker filter cannot.
+Metadata is folded in as `key:value` tokens as well, so structured filtering
+works in the picker: type `priority:high`, or `tags:cache` for a value inside a
+YAML list. Most pickers treat a space as AND, so `priority:high tags:cache`
+narrows on both.
+
+Picker filtering is substring matching, so `priority:high` also matches
+`priority:highest`. `:IssueHub find --meta priority=high` is the exact form: it
+parses the YAML rather than the text, and reaches analysis history and regexes
+a picker filter cannot.
 
                                                        *issuehub-find-syntax*
 `find` accepts free text, flags, or both: >

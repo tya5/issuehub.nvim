@@ -481,8 +481,19 @@ Your memo and metadata ride along on each row as hidden match text, so typing
 `認証` finds an issue whose *notes* mention it even though nothing on screen
 does. Nothing is fetched, and no prompt appears.
 
-Use `:IssueHub find <query>` when you want precision instead — it reaches
-analysis history and regexes that a picker filter cannot.
+Metadata is also folded in as `key:value` tokens, so you can filter structurally
+right in the picker:
+
+```
+priority:high            narrows to issues you marked high
+tags:cache               matches a value inside a YAML list
+priority:high tags:cache both (most pickers treat a space as AND)
+```
+
+> Picker filtering is substring matching, so `priority:high` also matches
+> `priority:highest`. Use `:IssueHub find --meta priority=high` when you need an
+> exact comparison — that one parses the YAML rather than the text, and reaches
+> analysis history and regexes a picker filter cannot.
 
 ### Searching your notes
 

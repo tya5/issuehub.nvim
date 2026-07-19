@@ -104,3 +104,42 @@ describe("query.matches_meta", function()
     assert.is_false(query.matches_meta("jira://EMPTY", meta("--meta priority=high")))
   end)
 end)
+
+describe("metadata tokens for picker filtering", function()
+  local overlay = require("issuehub.core.overlay")
+
+  before_each(function()
+    config.setup({ workspace = vim.fn.tempname(), index = "json" })
+    require("issuehub.core.index").reset()
+    require("issuehub.core.repository").ensure()
+  end)
+
+  it("emits one token per pair, and one per list value", function()
+    assert.equals(
+      "owner:tya5 priority:high tags:cache tags:timeout",
+      overlay.tokens({ priority = "high", owner = "tya5", tags = { "timeout", "cache" } })
+    )
+  end)
+
+  it("lowercases so picker filtering is case-insensitive", function()
+    assert.equals("priority:high", overlay.tokens({ Priority = "HIGH" }))
+  end)
+
+  it("skips empty values", function()
+    assert.equals("a:1", overlay.tokens({ a = 1, b = "" }))
+  end)
+
+  it("puts both spellings in the searchable blob", function()
+    overlay.write("jira://A", { memo = "notes", metadata = "priority: high" })
+    local blob = overlay.searchable("jira://A")
+    -- The raw text, so `priority: high` matches...
+    assert.truthy(blob:find("priority: high", 1, true))
+    -- ...and the token, so `priority:high` does too.
+    assert.truthy(blob:find("priority:high", 1, true))
+    assert.truthy(blob:find("notes", 1, true))
+  end)
+
+  it("is empty for an issue with no overlay", function()
+    assert.equals("", overlay.searchable("jira://NOTHING"))
+  end)
+end)

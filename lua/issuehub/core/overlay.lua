@@ -98,6 +98,30 @@ function M.metadata(uri)
   return yaml.parse(M.read(uri).metadata)
 end
 
+---Normalized `key:value` tokens for a metadata table.
+---
+--- A picker filter can only match text, so structured filtering in the picker
+--- has to be spelled as text. Emitting `priority:high` alongside the raw
+--- `priority: high` means typing either form narrows the list, and list values
+--- become one token each (`tags:cache`).
+---@param metadata table
+---@return string
+function M.tokens(metadata)
+  local out = {}
+  for key, value in pairs(metadata) do
+    local name = tostring(key):lower()
+    if type(value) == "table" then
+      for _, item in ipairs(value) do
+        out[#out + 1] = ("%s:%s"):format(name, tostring(item):lower())
+      end
+    elseif value ~= nil and value ~= "" then
+      out[#out + 1] = ("%s:%s"):format(name, tostring(value):lower())
+    end
+  end
+  table.sort(out)
+  return table.concat(out, " ")
+end
+
 ---The overlay text a picker should match against, as one blob.
 ---
 --- Analyses are excluded deliberately: they are long, and matching a picker
@@ -110,7 +134,8 @@ function M.searchable(uri)
   if overlay.memo == "" and overlay.metadata == "" then
     return ""
   end
-  return (overlay.memo .. " " .. overlay.metadata):gsub("%s+", " ")
+  local tokens = M.tokens(require("issuehub.util.yaml").parse(overlay.metadata))
+  return ((overlay.memo .. " " .. overlay.metadata .. " " .. tokens):gsub("%s+", " "))
 end
 
 ---Whether an issue has any overlay content at all.

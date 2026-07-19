@@ -14,7 +14,10 @@ This project is pre-1.0: the public API may break between minor versions until
   and filters as you type, which is the same shape as `<Plug>(IssueHubOpen)` —
   the two now differ only in corpus, not in interaction. Memo and metadata ride
   along on each row as hidden match text, so typing a word that appears only in
-  your notes still narrows the list without showing the note. `:IssueHub find
+  your notes still narrows the list without showing the note. Metadata is also
+  folded in as normalized `key:value` tokens, so `priority:high` and
+  `tags:cache` filter structurally in the picker — substring matching, so
+  `--meta` remains the exact form. `:IssueHub find
   {query}` remains the precise form and still reaches analysis history and
   regexes a picker filter cannot.
 - `issuehub.browse()` is the new no-argument entry point; `find("")` routes to
