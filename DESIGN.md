@@ -1124,7 +1124,7 @@ release** with a third-party provider proving the interface.
 | **0.3** ✅ | sync + change detection, "changed since I last looked", `:IssueHub sync` / `changed` |
 | **0.4** ✅ | Collections, Export (all four formats), ripgrep path + `--regex` for `find`, Current View |
 | **0.5** ✅ | Backend interface with request kinds, `none` + A2A, analysis history and derived staleness |
-| **0.6** | FTS5 indexing of memo / metadata / analysis bodies (the schema columns exist in 0.1 but are populated only with title and description) |
+| **0.6** ✅ | FTS5 indexing of memo / metadata / analysis bodies, with per-column match attribution |
 | **0.7** | Docs, vimdoc, third-party extension guide, API freeze candidate |
 
 Rationale for the ordering: each milestone is independently useful, and the

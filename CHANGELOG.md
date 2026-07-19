@@ -10,6 +10,16 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ### Added
 
+- **Full-text search over your notes (0.6).** The FTS5 schema has carried memo,
+  metadata, and analyses columns since 0.1, but only title and description were
+  ever written into them. They are now populated, so `:IssueHub find` searches
+  everything you wrote about an issue — not just what the tracker returned.
+  - Results say **which column matched** (`[memo]`, `[metadata]`, `[analyses]`),
+    using snippet markers, so the FTS path is as informative as the ripgrep one.
+  - The index is refreshed when notes are saved and when an analysis is written,
+    and a rebuild recovers the prose from the Repository — the index still holds
+    no truth of its own.
+
 - **Backends and analysis history (0.5).** AI is opt-in and routed through a
   single interface; the default `none` backend sends nothing anywhere.
   - **Requests carry a `kind`** and backends advertise which kinds they handle,

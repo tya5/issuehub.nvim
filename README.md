@@ -15,7 +15,7 @@ every issue with a local, Git-managed workspace of notes, metadata, and analysis
 > optional AI backends with saved analysis history, and an issue buffer with
 > editable memo / metadata / prompt written back to your Git-managed workspace.
 >
-> **Not yet:** FTS5 indexing of note bodies (0.6), vimdoc and API freeze (0.7).
+> **Not yet:** vimdoc and the API freeze (0.7).
 >
 > The public API may break between minor versions until 1.0.
 > See [DESIGN.md](DESIGN.md).
@@ -395,6 +395,35 @@ Anything you typed in the editable sections is kept.
 **metadata.yaml is written back verbatim.** Comments, key order, and spacing
 survive exactly as you typed them — issuehub parses that file for search and
 export, but never reformats it.
+
+### Searching your notes
+
+```vim
+:IssueHub find eviction          " ranked full-text across everything local
+:IssueHub find "cache.warm"      " a fixed string, not a pattern
+:IssueHub find --regex cache.*   " forces the ripgrep path
+```
+
+`find` searches the cached issue **and everything you wrote about it** — memo,
+metadata, and analysis history — and tells you which of those matched:
+
+```
+  PROJ-123  In Progress  2026-07-19  Timeout on cache warmup   [memo]
+  PROJ-140  Open         2026-07-18  Retry storm on failover   [analyses]
+```
+
+Two engines, chosen automatically:
+
+| | With `index = "sqlite"` + FTS5 | Otherwise |
+| --- | --- | --- |
+| Engine | SQLite FTS5 | ripgrep |
+| Ranking | by relevance | by match order |
+| `--regex` | falls through to ripgrep | native |
+
+They are complementary rather than redundant: FTS5 ranks whole documents by
+relevance, which is what you want in an accumulating knowledge base; ripgrep
+finds exact lines and regexes. Without either, `find` degrades to a substring
+scan of the index.
 
 ### Collections and export
 

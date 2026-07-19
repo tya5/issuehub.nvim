@@ -8,7 +8,8 @@ local M = {}
 
 ---@class issuehub.Index
 ---@field name string
----@field put fun(self, issue: issuehub.Issue)
+---@field put fun(self, issue: issuehub.Issue)   Also indexes the issue's notes,
+---                                              where the backend supports it.
 ---@field delete fun(self, uri: string)
 ---@field set_bookmark fun(self, uri: string, value: boolean)
 ---@field set_seen fun(self, uri: string, updated_at: string?)

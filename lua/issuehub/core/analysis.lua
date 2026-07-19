@@ -156,7 +156,27 @@ function M.save(uri, data)
     return nil, err
   end
 
+  -- Re-index so the new analysis is searchable immediately (§15).
+  if entry and entry.issue then
+    require("issuehub.core.index").get():put(entry.issue)
+  end
+
   return stamp
+end
+
+---All analysis prose for an issue, for full-text indexing.
+---
+---Prompts are included as well as responses: "what did I ask about this" is a
+---reasonable thing to search for later.
+---@param uri string
+---@return string
+function M.searchable_text(uri)
+  local chunks = {}
+  for _, entry in ipairs(M.list(uri)) do
+    chunks[#chunks + 1] = entry.prompt
+    chunks[#chunks + 1] = entry.response
+  end
+  return table.concat(chunks, "\n\n")
 end
 
 ---Build the request context for an issue: the cached issue plus the overlay.

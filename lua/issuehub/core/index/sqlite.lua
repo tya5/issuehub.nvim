@@ -142,6 +142,22 @@ function Sqlite:has_fts()
   return self.fts == true
 end
 
+---The searchable bodies for an issue: the payload plus everything the user
+---wrote about it.
+---
+--- This is what makes FTS5 worth having over the JSON index — ranked search
+--- across accumulated prose, which is the whole point of a knowledge base.
+---@param uri string
+---@return table<string, string>
+local function documents(uri)
+  local overlay = require("issuehub.core.overlay").read(uri)
+  return {
+    memo = overlay.memo,
+    metadata = overlay.metadata,
+    analyses = require("issuehub.core.analysis").searchable_text(uri),
+  }
+end
+
 ---@param issue issuehub.Issue
 function Sqlite:put(issue)
   self:_ensure()
@@ -166,12 +182,16 @@ function Sqlite:put(issue)
   self:_exec(sql)
 
   if self:has_fts() then
+    local docs = documents(issue.uri)
     self:_exec(("DELETE FROM issues_fts WHERE uri = %s;"):format(q(issue.uri)))
     self:_exec(
-      ("INSERT INTO issues_fts (uri, title, description, memo, metadata, analyses) VALUES (%s, %s, %s, '', '', '');"):format(
+      ("INSERT INTO issues_fts (uri, title, description, memo, metadata, analyses) VALUES (%s, %s, %s, %s, %s, %s);"):format(
         q(issue.uri),
         q(issue.title),
-        q(issue.description)
+        q(issue.description),
+        q(docs.memo),
+        q(docs.metadata),
+        q(docs.analyses)
       )
     )
   end
@@ -244,20 +264,60 @@ function Sqlite:list(filter)
   return vim.tbl_map(to_item, rows)
 end
 
+---Column indices in issues_fts, for per-column match attribution.
+local FTS_COLUMNS = { { 1, "title" }, { 2, "description" }, { 3, "memo" }, { 4, "metadata" }, { 5, "analyses" } }
+
+local MARK = "\2"
+
+---Which columns a row matched, using snippet() markers.
+---
+--- FTS5 has no direct "which column matched", but a snippet with a marker that
+--- cannot occur in real text answers it in the same query.
+---@param row table
+---@return string?
+local function matched_columns(row)
+  local fields = {}
+  for _, column in ipairs(FTS_COLUMNS) do
+    local snippet = row["snip_" .. column[2]]
+    if type(snippet) == "string" and snippet:find(MARK, 1, true) then
+      fields[#fields + 1] = column[2]
+    end
+  end
+  if #fields == 0 then
+    return nil
+  end
+  return table.concat(fields, ",")
+end
+
 ---Ranked full-text search when FTS5 is present; LIKE otherwise.
 ---@param query string
 ---@return issuehub.ViewItem[]
 function Sqlite:search(query)
   self:_ensure()
   if self:has_fts() then
+    local snippets = {}
+    for _, column in ipairs(FTS_COLUMNS) do
+      snippets[#snippets + 1] = ("snippet(issues_fts, %d, '%s', '', '…', 8) AS snip_%s"):format(
+        column[1],
+        MARK,
+        column[2]
+      )
+    end
+
     local rows = self:_exec(([[
-      SELECT i.* FROM issues_fts f
+      SELECT i.*, %s FROM issues_fts f
       JOIN issues i ON i.uri = f.uri
       WHERE issues_fts MATCH %s
       ORDER BY rank;
-    ]]):format(q(query)))
+    ]]):format(table.concat(snippets, ", "), q(query)))
+
     if rows then
-      return vim.tbl_map(to_item, rows)
+      return vim.tbl_map(function(row)
+        local item = to_item(row)
+        -- Ranked results say *why* they matched, same as the ripgrep path.
+        item.matched_in = matched_columns(row)
+        return item
+      end, rows)
     end
   end
 
