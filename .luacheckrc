@@ -25,4 +25,5 @@ globals = {
 ignore = {
   "212", -- unused argument
   "631", -- line too long (stylua owns formatting)
+  "122", -- specs stub vim.notify to assert on user-facing messages
 }
