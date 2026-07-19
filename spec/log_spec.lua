@@ -19,6 +19,9 @@ describe("log.redact", function()
   end)
 
   it("leaves ordinary text alone", function()
-    assert.equals("GET https://example.com/rest/api/3/issue/PROJ-1", log.redact("GET https://example.com/rest/api/3/issue/PROJ-1"))
+    assert.equals(
+      "GET https://example.com/rest/api/3/issue/PROJ-1",
+      log.redact("GET https://example.com/rest/api/3/issue/PROJ-1")
+    )
   end)
 end)

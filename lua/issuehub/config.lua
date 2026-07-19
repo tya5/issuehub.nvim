@@ -90,7 +90,9 @@ local function validate(opts, raw)
     )
   end
   if not VALID_ON_OPEN[opts.sync.on_open] then
-    errors[#errors + 1] = ("sync.on_open must be one of always|stale|never (got %s)"):format(tostring(opts.sync.on_open))
+    errors[#errors + 1] = ("sync.on_open must be one of always|stale|never (got %s)"):format(
+      tostring(opts.sync.on_open)
+    )
   end
 
   for name, p in pairs(opts.providers) do

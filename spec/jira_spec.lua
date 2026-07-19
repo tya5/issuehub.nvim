@@ -32,7 +32,13 @@ local CLOUD_ISSUE = {
     description = {
       type = "doc",
       content = {
-        { type = "paragraph", content = { { type = "text", text = "Fails after " }, { type = "text", text = "30s", marks = { { type = "code" } } } } },
+        {
+          type = "paragraph",
+          content = {
+            { type = "text", text = "Fails after " },
+            { type = "text", text = "30s", marks = { { type = "code" } } },
+          },
+        },
       },
     },
     status = { id = "3", name = "In Progress", statusCategory = { key = "indeterminate" } },
@@ -57,7 +63,8 @@ end
 
 describe("jira provider", function()
   it("maps a cloud issue onto the canonical model", function()
-    local p = provider_with({ ["/issue/PROJ-123"] = CLOUD_ISSUE, ["/issue/PROJ-123/comment"] = { comments = {}, total = 0 } })
+    local p =
+      provider_with({ ["/issue/PROJ-123"] = CLOUD_ISSUE, ["/issue/PROJ-123/comment"] = { comments = {}, total = 0 } })
     local result
     p:get("PROJ-123", function(_, issue)
       result = issue
@@ -102,7 +109,8 @@ describe("jira provider", function()
   end)
 
   it("caps comment fetching rather than only capping rendering", function()
-    local p = provider_with({ ["/issue/PROJ-123"] = CLOUD_ISSUE, ["/issue/PROJ-123/comment"] = { comments = {}, total = 250 } })
+    local p =
+      provider_with({ ["/issue/PROJ-123"] = CLOUD_ISSUE, ["/issue/PROJ-123/comment"] = { comments = {}, total = 250 } })
     p:get("PROJ-123", function() end)
 
     local comment_call

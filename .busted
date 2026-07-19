@@ -2,6 +2,10 @@ return {
   _all = {
     -- nlua runs the specs inside Neovim, so vim.* is available without plenary.
     lua = "nlua",
+    -- Without this, `require("issuehub.…")` fails under busted: unlike the local
+    -- runner (which prepends cwd to runtimepath), busted only searches
+    -- package.path, and `lua/` is not on it when running from source.
+    lpath = "lua/?.lua;lua/?/init.lua",
   },
   default = {
     verbose = true,

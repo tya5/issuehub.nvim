@@ -66,7 +66,15 @@ function M.timestamp(ts)
 
   -- os.time() interprets the table as local time, so correct by the local
   -- offset as well to land on a true UTC instant.
-  local local_epoch = os.time({ year = tonumber(y), month = tonumber(mo), day = tonumber(d), hour = tonumber(h), min = tonumber(mi), sec = tonumber(s), isdst = false })
+  local local_epoch = os.time({
+    year = tonumber(y),
+    month = tonumber(mo),
+    day = tonumber(d),
+    hour = tonumber(h),
+    min = tonumber(mi),
+    sec = tonumber(s),
+    isdst = false,
+  })
   local local_offset = os.difftime(local_epoch, os.time(os.date("!*t", local_epoch) --[[@as osdateparam]]))
   return os.date("!%Y-%m-%dT%H:%M:%SZ", local_epoch + local_offset - offset) --[[@as string]]
 end

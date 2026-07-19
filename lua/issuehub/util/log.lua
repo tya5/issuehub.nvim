@@ -6,9 +6,9 @@ local levels = vim.log.levels
 ---Each pattern captures (keep, secret). gsub replaces the WHOLE match, so the
 ---leading context has to be captured and re-emitted rather than assumed intact.
 local REDACT = {
-  "([Aa]uthorization:%s*%a+%s+)([^\r\n\"]+)",
-  "([Aa]uthorization:%s*)([^\r\n\"]+)",
-  "(user%s*=%s*\"[^:\"]*:)([^\"]*)",
+  '([Aa]uthorization:%s*%a+%s+)([^\r\n"]+)',
+  '([Aa]uthorization:%s*)([^\r\n"]+)',
+  '(user%s*=%s*"[^:"]*:)([^"]*)',
   "([Tt]oken[\"']?%s*[:=]%s*[\"']?)([%w%-%._~%+/=]+)",
   "([Aa]pi[_%-]?[Kk]ey[\"']?%s*[:=]%s*[\"']?)([%w%-%._~%+/=]+)",
 }

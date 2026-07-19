@@ -27,12 +27,14 @@ describe("view", function()
   it("falls back to all items when nothing is selected", function()
     -- This is what lets a picker without multi_select degrade gracefully
     -- instead of erroring (§9.2).
-    local view = view_mod.from_issues({ make("A", false, "2026-07-19T00:00:00Z"), make("B", false, "2026-07-18T00:00:00Z") })
+    local view =
+      view_mod.from_issues({ make("A", false, "2026-07-19T00:00:00Z"), make("B", false, "2026-07-18T00:00:00Z") })
     assert.equals(2, #view:get_selected())
   end)
 
   it("honours an explicit selection", function()
-    local view = view_mod.from_issues({ make("A", false, "2026-07-19T00:00:00Z"), make("B", false, "2026-07-18T00:00:00Z") })
+    local view =
+      view_mod.from_issues({ make("A", false, "2026-07-19T00:00:00Z"), make("B", false, "2026-07-18T00:00:00Z") })
     view:set_selected({ view:get_items()[1] })
     assert.equals(1, #view:get_selected())
   end)
