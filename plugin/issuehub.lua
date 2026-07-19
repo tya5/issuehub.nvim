@@ -113,6 +113,36 @@ local subcommands = {
     end
   end,
 
+  fetch = function(args)
+    local action = args[1]
+    local fetch = require("issuehub.core.fetch")
+
+    if action == "stop" then
+      local stopped = fetch.cancel()
+      return vim.notify(
+        stopped > 0 and ("issuehub: stopping %d fetch(es) after the current page"):format(stopped)
+          or "issuehub: nothing is fetching"
+      )
+    end
+
+    if action == "status" then
+      local active = fetch.active()
+      if #active == 0 then
+        return require("issuehub").lists()
+      end
+      for _, run in ipairs(active) do
+        vim.notify(("issuehub: %s — %d issues, %d pages, running"):format(run.provider, run.issues, run.pages))
+      end
+      return
+    end
+
+    if action == "resume" then
+      return require("issuehub").fetch_all(args[2], { resume = true })
+    end
+
+    require("issuehub").fetch_all(action)
+  end,
+
   sync = function(args)
     require("issuehub").sync(args[1])
   end,

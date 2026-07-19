@@ -94,47 +94,51 @@ function GitLab:_to_issue(raw)
   })
 end
 
----@param params table
----@param cb fun(err: string?, issues: issuehub.Issue[]?)
-function GitLab:_paged(params, cb)
-  local max, per_page = putil.limits(self.opts)
+---Fetch ONE page. `list` and `search` are this in a loop.
+---@param query table|string|nil
+---@param cursor any   Page number; nil starts at 1.
+---@param cb fun(err: string?, issues: issuehub.Issue[]?, next_cursor: any)
+function GitLab:page(query, cursor, cb)
+  local _, per_page = putil.limits(self.opts)
+  local page = cursor or 1
 
-  putil.paginate({
-    max = max,
-    per_page = per_page,
-    fetch = function(cursor, done)
-      local page = cursor or 1
-      putil.call(self:_ctx(), "/issues", {
-        query = vim.tbl_extend("force", { per_page = per_page, page = page }, params),
-      }, function(err, body)
-        if err then
-          return done(err)
-        end
-        local issues = {}
-        for _, raw in ipairs(body or {}) do
-          issues[#issues + 1] = self:_to_issue(raw)
-        end
-        done(nil, issues, page + 1)
-      end)
-    end,
-  }, cb)
+  local params = query or self.opts.default_query or { scope = "assigned_to_me", state = "opened" }
+  if type(params) == "string" then
+    params = { search = params, scope = "all" }
+  end
+
+  putil.call(self:_ctx(), "/issues", {
+    query = vim.tbl_extend("force", { per_page = per_page, page = page }, params),
+  }, function(err, body)
+    if err then
+      return cb(err)
+    end
+    local issues = {}
+    for _, raw in ipairs(body or {}) do
+      issues[#issues + 1] = self:_to_issue(raw)
+    end
+    cb(nil, issues, #(body or {}) >= per_page and (page + 1) or nil)
+  end)
 end
 
 ---@param query table|string|nil
 ---@param cb fun(err: string?, issues: issuehub.Issue[]?)
 function GitLab:list(query, cb)
-  local params = query or self.opts.default_query or { scope = "assigned_to_me", state = "opened" }
-  if type(params) == "string" then
-    return self:search(params, cb)
-  end
-  self:_paged(params, cb)
+  local max, per_page = putil.limits(self.opts)
+  putil.paginate({
+    max = max,
+    per_page = per_page,
+    fetch = function(cursor, done)
+      self:page(query, cursor, done)
+    end,
+  }, cb)
 end
 
 ---Full-text search across issues the token can see.
 ---@param query string
 ---@param cb fun(err: string?, issues: issuehub.Issue[]?)
 function GitLab:search(query, cb)
-  self:_paged({ search = query, scope = "all" }, cb)
+  self:list(query, cb)
 end
 
 ---@param id string  "group/project#12"

@@ -49,6 +49,11 @@ _G.assert = setmetatable({
       fail("expected nil, got " .. vim.inspect(v))
     end
   end,
+  not_equal = function(unexpected, actual)
+    if unexpected == actual then
+      fail("expected values to differ, both were " .. vim.inspect(actual))
+    end
+  end,
   truthy = function(v)
     if not v then
       fail("expected truthy, got " .. vim.inspect(v))

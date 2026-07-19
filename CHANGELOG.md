@@ -10,6 +10,19 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ### Added
 
+- **`:IssueHub fetch` — cache a whole tracker in the background.** Pages through
+  everything a server's query matches, per server, without blocking the editor.
+  `status`, `stop`, and `resume` sub-actions. Progress is reported on a timer
+  rather than per page, so a fast server does not bury you in notifications.
+- **Cached issue *lists*** under `.state/lists/`, keyed by (provider, query).
+  Pages merge in as they arrive rather than being all-or-nothing, so an
+  interrupted walk of a twenty-thousand-issue backlog keeps what it collected
+  and stores the cursor to continue from. The list carries its own `fetched_at`,
+  because "which issues matched this query, and when did I last ask" is a
+  different fact from "what is in PROJ-123" and deserves its own freshness.
+- Providers expose `page(query, cursor, cb)` for a single page; `list` and
+  `search` are that in a loop. This is what makes an incremental, resumable walk
+  possible at all.
 - **Pagination.** Queries fetched only the first page before, which made older
   tickets unreachable. `providers.<name>.max_results` pages until that many
   results and `per_page` sets the page size; the default is still one page, so

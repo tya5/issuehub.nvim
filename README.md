@@ -58,6 +58,38 @@ use and delegates:
 Any number of instances of each type can be registered — see
 [Multiple servers](#multiple-servers).
 
+### Caching a whole tracker
+
+```vim
+:IssueHub fetch              " pick a server, or the only one
+:IssueHub fetch jira_internal
+:IssueHub fetch status       " progress, or what is already cached
+:IssueHub fetch stop         " halt after the page in flight
+:IssueHub fetch resume       " continue a partial walk
+```
+
+Pages through everything a server's query matches, **in the background**. Every
+request is already async, so Neovim stays usable throughout — measured against
+the real GitHub API, the event loop kept ticking while 400 issues came down over
+4 pages in 5 seconds.
+
+It is **per server**, since each is a different amount of traffic against a
+different system; with several configured you are asked which.
+
+Pages merge into the cache as they arrive, so an interrupted walk keeps what it
+collected and knows where to continue. A fresh walk replaces the list, a resumed
+one appends.
+
+The **list itself** is cached separately from the issues, under `.state/lists/`,
+because "which issues matched this query, and when did I last ask" is a
+different fact with its own freshness:
+
+```
+issuehub cached lists:
+  github        1240 issues  2h ago
+  jira_internal 8300 issues  12m ago, partial
+```
+
 ### Large trackers
 
 By default a query fetches **one page** (100 issues). A backlog of twenty

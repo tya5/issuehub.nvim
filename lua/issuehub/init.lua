@@ -125,6 +125,95 @@ function M.search_engine(pattern, opts)
   return "ripgrep"
 end
 
+---Walk a provider's whole query into the cache, in the background.
+---
+---@param provider_name string?
+---@param opts { resume: boolean?, query: any? }?
+function M.fetch_all(provider_name, opts)
+  opts = opts or {}
+  local providers = require("issuehub.provider")
+  local names = providers.configured_names()
+  if #names == 0 then
+    return vim.notify("issuehub: no providers configured", vim.log.levels.ERROR)
+  end
+
+  -- Caching a whole backlog is per server, and with several configured the
+  -- choice is not one to guess at: each is a different amount of traffic
+  -- against a different system.
+  local name = provider_name
+  if not name then
+    if #names > 1 then
+      return vim.ui.select(names, { prompt = "Fetch all issues from" }, function(chosen)
+        if chosen then
+          M.fetch_all(chosen, opts)
+        end
+      end)
+    end
+    name = names[1]
+  end
+
+  local fetch = require("issuehub.core.fetch")
+  local listcache = require("issuehub.core.listcache")
+
+  local existing = listcache.get(name, opts.query)
+  if existing and not existing.complete and not opts.resume then
+    vim.notify(
+      ("issuehub: %s has a partial list (%d issues, %s) — `:IssueHub fetch resume` continues it"):format(
+        name,
+        #existing.uris,
+        listcache.describe(existing)
+      ),
+      vim.log.levels.INFO
+    )
+  end
+
+  vim.notify(("issuehub: fetching all of %s in the background… (`:IssueHub fetch stop` to stop)"):format(name))
+
+  local last_report = 0
+  fetch.all(name, {
+    query = opts.query,
+    resume = opts.resume,
+    on_progress = function(run)
+      -- Report on a timer rather than per page: a fast server would otherwise
+      -- bury the user in notifications.
+      local now = vim.uv.now()
+      if now - last_report > 3000 then
+        last_report = now
+        vim.notify(("issuehub: %s — %d issues, %d pages"):format(run.provider, run.issues, run.pages))
+      end
+    end,
+  }, function(err, run)
+    if err then
+      return vim.notify(
+        ("issuehub: fetch stopped after %d issues — %s (`:IssueHub fetch resume` continues)"):format(
+          run and run.issues or 0,
+          err
+        ),
+        vim.log.levels.WARN
+      )
+    end
+
+    local list = listcache.get(name, opts.query)
+    local state = run.cancelled and "cancelled" or (list and list.complete and "complete" or "incomplete")
+    vim.notify(("issuehub: %s fetch %s — %d issues in %d pages"):format(name, state, run.issues, run.pages))
+  end)
+end
+
+---Show what has been cached per query, and how fresh it is.
+function M.lists()
+  local listcache = require("issuehub.core.listcache")
+  local lists = listcache.all()
+  if #lists == 0 then
+    return vim.notify("issuehub: no cached lists yet — run `:IssueHub fetch`", vim.log.levels.INFO)
+  end
+
+  local lines = {}
+  for _, list in ipairs(lists) do
+    lines[#lines + 1] = ("  %-12s %5d issues  %s"):format(list.provider, #list.uris, listcache.describe(list))
+  end
+  vim.notify("issuehub cached lists:\n" .. table.concat(lines, "\n"))
+end
+
 ---Browse everything local, filtering live in the picker.
 ---
 ---The counterpart to |issuehub.open()|: same UI, different corpus. Typing in

@@ -135,46 +135,58 @@ function Jira:_to_issue(raw)
   })
 end
 
----@param jql string
----@param cb fun(err: string?, issues: issuehub.Issue[]?)
-function Jira:_search_jql(jql, cb)
+---Fetch ONE page.
+---
+---Exposed so the list cache can resume where it left off; `list` and `search`
+---are this in a loop.
+---@param query string?   JQL; nil means the configured default.
+---@param cursor any      Opaque; nil starts from the beginning.
+---@param cb fun(err: string?, issues: issuehub.Issue[]?, next_cursor: any)
+function Jira:page(query, cursor, cb)
   local putil = require("issuehub.provider.util")
-  local max, per_page = putil.limits(self.opts)
+  local _, per_page = putil.limits(self.opts)
+  local jql = query or self.opts.default_query or "assignee = currentUser() AND resolution = Unresolved"
 
   -- Cloud pages with an opaque nextPageToken; Server/DC with startAt.
   local cloud = self:_is_cloud()
   local path = cloud and (self:_api() .. "/search/jql") or (self:_api() .. "/search")
 
+  local params = { jql = jql, maxResults = per_page, fields = FIELDS }
+  if cloud then
+    params.nextPageToken = cursor
+  else
+    params.startAt = cursor or 0
+  end
+
+  self:_call(path, { query = params }, function(err, body)
+    if err then
+      return cb(err)
+    end
+    local raw_issues = (body or {}).issues or {}
+    local issues = {}
+    for _, raw in ipairs(raw_issues) do
+      issues[#issues + 1] = self:_to_issue(raw)
+    end
+
+    local next_cursor
+    if #raw_issues >= per_page then
+      -- An absent token means this was the last page, whatever the count says.
+      next_cursor = cloud and (body and body.nextPageToken or nil) or ((cursor or 0) + #raw_issues)
+    end
+    cb(nil, issues, next_cursor)
+  end)
+end
+
+---@param jql string
+---@param cb fun(err: string?, issues: issuehub.Issue[]?)
+function Jira:_search_jql(jql, cb)
+  local putil = require("issuehub.provider.util")
+  local max, per_page = putil.limits(self.opts)
   putil.paginate({
     max = max,
     per_page = per_page,
     fetch = function(cursor, done)
-      local query = { jql = jql, maxResults = per_page, fields = FIELDS }
-      if cloud then
-        query.nextPageToken = cursor
-      else
-        query.startAt = cursor or 0
-      end
-
-      self:_call(path, { query = query }, function(err, body)
-        if err then
-          return done(err)
-        end
-        local raw_issues = (body or {}).issues or {}
-        local issues = {}
-        for _, raw in ipairs(raw_issues) do
-          issues[#issues + 1] = self:_to_issue(raw)
-        end
-
-        local next_cursor
-        if cloud then
-          -- Absent token means this was the last page, whatever the count says.
-          next_cursor = body and body.nextPageToken or nil
-        else
-          next_cursor = (cursor or 0) + #raw_issues
-        end
-        done(nil, issues, next_cursor)
-      end)
+      self:page(jql, cursor, done)
     end,
   }, cb)
 end

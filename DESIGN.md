@@ -341,6 +341,8 @@ Git.** Everything derived, volatile, or machine-generated lives under `.state/`.
 │   │   └── jira/PROJ-123.json  # { fetched_at, issue }
 │   ├── index/
 │   │   └── issues.json         # or issues.db — derived, see §5.2-5.3
+│   ├── lists/
+│   │   └── <provider>-<hash>.json  # cached query results + freshness
 │   └── lock/
 │       └── sync.lock
 │

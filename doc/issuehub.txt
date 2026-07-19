@@ -178,6 +178,13 @@ pollute the global command namespace.
                           local and filters in the picker. Accepts `--regex`
                           and `--meta`. See |issuehub-find-syntax|.
 :IssueHub local           Everything already cached. Works offline.
+:IssueHub fetch [{provider}]
+                          Walk a server's whole query into the cache, page by
+                          page, in the background. Per server: with several
+                          configured you are asked which. Sub-actions:
+                          `resume` continues a partial walk, `stop` halts
+                          after the page in flight, `status` shows progress.
+                          See |issuehub-fetch|.
 :IssueHub sync [{target}] Re-fetch and report what moved. {target} may be a
                           URI or a provider instance name; omitted means
                           everything local.
@@ -325,6 +332,27 @@ provider-specific.
 GitHub pull requests are included alongside issues; GitHub numbers both in one
 sequence per repository, so `owner/repo#123` is unambiguous. Their status
 reads Open, Draft, Merged, or Closed.
+
+                                                          *issuehub-fetch*
+CACHING A WHOLE TRACKER ~
+
+`:IssueHub fetch` pages through everything a server's query matches and caches
+it, in the background. Every request is already asynchronous, so Neovim stays
+usable; what this adds is the loop, progress reporting, and the ability to
+stop and resume. >
+    :IssueHub fetch              " pick a server, or the only one
+    :IssueHub fetch jira_internal
+    :IssueHub fetch status       " progress, or what is already cached
+    :IssueHub fetch stop         " halt after the current page
+    :IssueHub fetch resume       " continue a partial walk
+<
+Pages merge into the cache as they arrive, so an interrupted walk keeps what
+it collected and knows where to continue. A fresh walk replaces the list; a
+resumed one appends.
+
+The list itself is cached separately from the issues, under `.state/lists/`,
+because "which issues matched this query, and when did I last ask" is a
+different fact with its own freshness. `:IssueHub fetch status` reports it.
 
 ==============================================================================
 10. SEARCH                                                *issuehub-search*
