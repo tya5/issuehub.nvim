@@ -1,0 +1,145 @@
+# The correctness ledger
+
+The real cost of this rewrite is not typing — it is silently re-introducing bugs
+that are already fixed. Every item below was hit during development, usually by
+running the thing rather than by testing. **Port each as a test in the Python
+suite.** They are the difference between a port and a regression.
+
+## Credentials
+
+- **Never in argv.** Tokens, proxy passwords, and client-key passphrases reach
+  curl through a config file on stdin. `ps` must not see them. In Python, use a
+  client that takes auth via headers/session, not a shelled-out argv.
+- **Never in logs.** The Lua logger redacts unconditionally: `Authorization`
+  headers, `user = "x:secret"`, `token=…`, `api_key=…`. Redaction with a regex
+  that captures `(prefix)(secret)` and re-emits only the prefix — a gsub that
+  replaced the whole match once ate the `Authorization:` prefix too. Test that a
+  known secret does not appear in the log.
+- **A literal string secret must be accepted.** An early resolver only accepted
+  a function / `*_cmd` / `*_env` and dropped a literal `proxy_password = "..."`.
+  curl then prompted for the password interactively, which **hangs a headless
+  process**. Resolution order: literal > cmd > env. Also: a proxy user with no
+  resolved password must emit `user:` (empty password), not a bare `user`, for
+  the same prompt-hang reason.
+- **Health reports resolvability, never the value** ("resolved (40 characters)").
+
+## Timestamps
+
+- Normalise every provider timestamp to `YYYY-MM-DDTHH:MM:SSZ` UTC on ingest.
+  Jira Cloud emits `+0900` offsets, Redmine emits `Z`. The index sorts these
+  lexicographically, so an un-normalised offset sorts wrong. A string that does
+  not parse passes through unchanged (don't crash on junk); empty → `""`.
+
+## Partial cache
+
+- `list`/`search` return issues with **no description or comments**; they are
+  cached as `partial: true`. Two invariants:
+  1. A partial write must **not** overwrite a complete entry's `description`/
+     `comments` — merge, keeping the complete fields. (Symptom when wrong: open
+     an issue from the picker and its description is permanently blank.)
+  2. A partial entry is **always stale** regardless of `fetched_at`, so opening
+     it triggers a real `get`.
+
+## Change detection (sync)
+
+- Compare the watched fields **directly** — `status.name`, `assignee`, `title`,
+  `description`, `labels` — not a content hash. The report has to say *what*
+  moved, so the comparison happens anyway; a hash is a second mechanism answering
+  a weaker question. `updated_at` is used for "have I seen this revision", not
+  for detecting change.
+- Comment delta uses `raw.comment_total`, not `len(comments)` — the fetched list
+  is capped, so its length understates the change. Never report *removed*
+  comments as added (clamp at 0).
+- A **first sighting is not a change** (old == nil ⇒ no change).
+- **Sync never mutates the workspace overlay.** Only the cache and `state.yaml`.
+  There is a test asserting exactly this; keep it.
+
+## Sync targets
+
+- Default targets = everything cached **plus** everything with a workspace
+  directory (notes), deduplicated. An issue annotated months ago that fell out of
+  the cache is still synced. `fetch` is per query; `sync` is per known-issue.
+
+## Changed-since-seen
+
+- Derived from `state.yaml.last_seen_updated_at` vs the cached `updated_at`.
+  Survives restarts, accumulates across syncs, and clears when the issue is
+  **opened** (touched), not when a sync runs. Mirror the marker into the index
+  (`seen_at`) so listing changed issues is a filter, not a directory walk. A
+  rebuild must recover `seen_at` from `state.yaml`.
+
+## Search routing
+
+- FTS5's `unicode61` tokeniser splits on whitespace, so a run of Japanese is
+  **one token** — `認証まわりの調査メモ` indexed whole, and searching `認証`
+  matches nothing (an empty result, not an error — the worst kind). The `trigram`
+  tokeniser fixes 3-char queries but not 2-char, the most common Japanese word
+  length. **Route non-ASCII queries to ripgrep**, which handles all of it. Also
+  ripgrep for `--regex`. FTS5 for ASCII when available; else ripgrep; else a
+  substring scan of the index.
+- ripgrep must search `.state/` too: it is a dot-dir *and* git-ignored, so
+  ripgrep skips it by default — pass `--hidden --no-ignore-vcs` (still exclude
+  `.git/`). Symptom when wrong: cached issue bodies are silently unsearchable.
+- Search results report **which field matched** (`memo`/`metadata`/`analyses`/
+  `issue`). For FTS, per-column attribution via `snippet()` markers is
+  **build-dependent** (worked on macOS sqlite3, produced no markers on the CI
+  runner). Use `instr()` over the FTS columns instead — exact, portable.
+
+## Filtering
+
+- `--meta k=v` compares case-insensitively and treats spaces/underscores as
+  hyphens, so `status=in-progress` and `"status=In Progress"` both match. `--meta
+  k` (no value) is a presence test. A list value (`tags: [a,b]`) matches
+  `tags=a`. Built-in keys (`status`, `state`, `provider`, `project`, `assignee`,
+  `bookmarked`, `labels`) filter alongside metadata; **metadata the user wrote
+  wins** over a built-in of the same name.
+- `state` is normalised open/closed; `status` is the provider's wording.
+
+## Pagination
+
+- Default is **one page** — never pull a 20k backlog by accident. `max_results`
+  opts in.
+- Stop at a short page (`< per_page`) without asking for one more; keep partial
+  results if a later page errors; GitHub search stops before its 1000 ceiling.
+- `fetch` flushes the list cache **per page**, so a killed process keeps its
+  progress and `--resume` continues from the persisted cursor.
+
+## Index is derived
+
+- Deleting `.state/` must be safe: `reindex` rebuilds from the cache, and must
+  recover `bookmarked` and `seen_at` from `state.yaml` (they are user data, not
+  payload). On a normal `put`, never overwrite `bookmarked`/`seen_at` with
+  payload — only the payload columns.
+- Bulk writes go through one batched transaction, not one process/statement per
+  issue (that turned a large sync into thousands of `sqlite3` spawns). Escaping
+  is by a single total quote function (quote-doubling, NUL-strip) since the
+  sqlite3 CLI has no bind — in Python with the `sqlite3` module, use real bound
+  parameters and this whole class of concern disappears; just keep the file/schema
+  identical.
+
+## Merged export
+
+- `all` and `provider[/project]` sources export the **union** of cache and
+  workspace. An issue known only by its notes (no cache entry) still produces a
+  row, with issue columns blank and `memo`/metadata present. A project filter
+  can only apply to something with a payload.
+
+## Repository / paths
+
+- Case-collision guard (above, ONDISK §URI). Percent-encode ids verbatim into
+  path segments; never hash. `.gitignore` must list `/.state/` or derived data
+  gets committed (health warns if not).
+- Writes are atomic (temp + rename). Cache/index/list writes skip fsync (derived,
+  rebuildable); overlay/state writes keep it (user data). The atomicity is from
+  rename, not fsync, so a killed process never leaves a half-file.
+
+## Collections
+
+- v2 directory layout with pre-v2 file fallback and migrate-on-write (ONDISK
+  §Collections). `list()` must not show a migrated collection twice.
+
+## Timestamps for analysis staleness (nvim-owned, but don't break it)
+
+- `analyses/<stamp>/metadata.yaml.issue_updated_at` vs cached `updated_at`
+  decides current/outdated. The CLI must not rewrite these files. It *does* index
+  the prose into FTS on `reindex`.
