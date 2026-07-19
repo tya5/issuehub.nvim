@@ -10,6 +10,31 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ### Added
 
+- **Collections, export, and the ripgrep search path (0.4).**
+  - **Collections** are local, static, cross-provider lists stored as YAML under
+    `.issuehub/collections/` and committed with the workspace. Static lists
+    rather than saved queries: a list diffs cleanly and "why is this in here"
+    always has a literal answer. Members that fall out of the cache are still
+    listed — a collection is the user's list, not the cache's.
+  - **Export** takes a View, never a picker, which is what makes
+    `:IssueHub export csv` work identically on a collection, a multi-select, or
+    the last thing the picker showed. Formats: csv, markdown, json, yaml, plus
+    `export.register()` for third parties. Rows combine the cached issue with the
+    overlay, flatten metadata to `meta.<key>`, and carry `fetched_at` so
+    staleness travels with the data. No network I/O.
+  - **Current View**: with no source, export acts on what you were just looking
+    at. The picker records the view it showed, so this needs no picker-specific
+    code anywhere in export.
+  - **`:IssueHub find --regex`** forces the ripgrep path, which reaches text the
+    index does not hold and annotates each result with *which* field matched.
+  - `export.dir` / `export.default_format` config, now that the feature exists.
+
+### Fixed
+
+- Local search silently excluded every cached issue body: `.state/` is both a
+  dot-directory and git-ignored, so ripgrep skipped it by default. Now passes
+  `--hidden --no-ignore-vcs` while still excluding `.git/`.
+
 - **Sync and change detection (0.3).** `:IssueHub sync [target]` re-fetches
   everything local — or one provider instance, or one issue — and reports what
   moved per issue (`status Open → In Progress, assignee, +2 comments`).

@@ -1024,8 +1024,6 @@ Implemented in 0.1:
 Planned, with the milestone that adds them:
 
 ```
-:IssueHub export <format> [target]   -- 0.4
-:IssueHub collection [name]          -- 0.4
 :IssueHub analyze [target]           -- 0.5
 ```
 
@@ -1107,7 +1105,7 @@ release** with a third-party provider proving the interface.
 | **0.1.1** ✅ | Redmine, GitHub, and GitLab providers; repository-qualified IDs |
 | **0.2** ✅ | Workspace + Overlay (memo/metadata/prompt), editable regions, `:w` writeback, bookmarks, `state.yaml` |
 | **0.3** ✅ | sync + change detection, "changed since I last looked", `:IssueHub sync` / `changed` |
-| **0.4** | Collections, Export (all four formats), ripgrep path + `--regex` for `find` |
+| **0.4** ✅ | Collections, Export (all four formats), ripgrep path + `--regex` for `find`, Current View |
 | **0.5** | Backend interface, `none` + A2A, Analysis history and staleness |
 | **0.6** | FTS5 indexing of memo / metadata / analysis bodies (the schema columns exist in 0.1 but are populated only with title and description) |
 | **0.7** | Docs, vimdoc, third-party extension guide, API freeze candidate |

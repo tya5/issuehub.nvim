@@ -37,6 +37,7 @@
 ---@field updated_at string
 ---@field bookmarked boolean
 ---@field seen_at string?    The issue's updated_at when the user last opened it.
+---@field matched_in string?  Which fields a local search matched, if any.
 
 ---@class issuehub.View
 ---@field source string      "query"|"collection"|"find"|"bookmarks"
@@ -81,6 +82,7 @@
 ---@field providers table<string, issuehub.ProviderConfig>
 ---@field ui issuehub.UIConfig
 ---@field sync issuehub.SyncConfig
+---@field export issuehub.ExportConfig
 ---@field http issuehub.HttpConfig
 ---@field log_level integer
 
@@ -108,5 +110,9 @@
 ---@class issuehub.SyncConfig
 ---@field on_open "always"|"stale"|"never"
 ---@field stale_after integer
+
+---@class issuehub.ExportConfig
+---@field dir string?             Output directory; defaults to the cwd.
+---@field default_format string
 
 return {}

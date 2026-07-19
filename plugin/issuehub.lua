@@ -41,15 +41,24 @@ local subcommands = {
   end,
 
   find = function(args)
+    local regex = false
+    args = vim.tbl_filter(function(arg)
+      if arg == "--regex" then
+        regex = true
+        return false
+      end
+      return true
+    end, args)
+
     local pattern = table.concat(args, " ")
     if pattern == "" then
       return vim.ui.input({ prompt = "Find: " }, function(value)
         if value and value ~= "" then
-          require("issuehub").find(value)
+          require("issuehub").find(value, { regex = regex })
         end
       end)
     end
-    require("issuehub").find(pattern)
+    require("issuehub").find(pattern, { regex = regex })
   end,
 
   ["local"] = function()
@@ -62,6 +71,41 @@ local subcommands = {
       return vim.notify("issuehub: not in an issue buffer", vim.log.levels.WARN)
     end
     require("issuehub.ui.buffer").refresh(uri)
+  end,
+
+  export = function(args)
+    -- [format] [source]. The output path comes from `export.dir` (or the cwd)
+    -- and the view's own name, so there is no third positional to get wrong.
+    require("issuehub").export(args[1], args[2])
+  end,
+
+  collection = function(args)
+    local action = args[1]
+    if action == "add" or action == "remove" or action == "delete" or action == "list" then
+      table.remove(args, 1)
+    else
+      action = nil
+    end
+
+    local issuehub = require("issuehub")
+    local collections = require("issuehub.core.collection")
+
+    if action == "add" then
+      if not args[1] then
+        return vim.notify("issuehub: collection add <name>", vim.log.levels.ERROR)
+      end
+      issuehub.collection_add(table.concat(args, " "))
+    elseif action == "remove" then
+      issuehub.collection_remove(table.concat(args, " "))
+    elseif action == "delete" then
+      local name = table.concat(args, " ")
+      vim.notify(collections.delete(name) and ("issuehub: deleted '" .. name .. "'") or "issuehub: no such collection")
+    elseif action == "list" then
+      local slugs = collections.list()
+      vim.notify(#slugs > 0 and ("issuehub collections: " .. table.concat(slugs, ", ")) or "issuehub: no collections")
+    else
+      issuehub.collection(table.concat(args, " "))
+    end
   end,
 
   sync = function(args)

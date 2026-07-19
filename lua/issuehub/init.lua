@@ -94,15 +94,162 @@ function M.search(query, provider_name)
   end)
 end
 
----Local search over the index.
+---Local search.
+---
+---Ranked full-text via the index when it can, ripgrep otherwise — and always
+---ripgrep for `--regex`, since the index cannot answer that (§15).
 ---@param pattern string
-function M.find(pattern)
-  local items = require("issuehub.core.index").get():search(pattern)
+---@param opts { regex: boolean? }?
+function M.find(pattern, opts)
+  opts = opts or {}
+  local search = require("issuehub.core.search")
+  local index = require("issuehub.core.index").get()
+
+  local items, err
+  local use_ripgrep = opts.regex or not (index.has_fts and index:has_fts())
+
+  if use_ripgrep and search.available() then
+    items, err = search.find(pattern, opts)
+    if err then
+      vim.notify("issuehub: " .. err, vim.log.levels.WARN)
+      items = index:search(pattern)
+    end
+  elseif opts.regex then
+    vim.notify("issuehub: --regex needs ripgrep; falling back to a plain search", vim.log.levels.WARN)
+    items = index:search(pattern)
+  else
+    items = index:search(pattern)
+  end
+
   if #items == 0 then
     return vim.notify("issuehub: no local matches for " .. pattern, vim.log.levels.INFO)
   end
   local view = require("issuehub.ui.view").new({ source = "find", label = "find: " .. pattern, items = items })
   require("issuehub.ui.picker").pick(view, { title = ("find (%d)"):format(#items) })
+end
+
+---Resolve an export/collection source name to a View.
+---@param source string?
+---@return issuehub.View?
+---@return string? err
+function M.resolve_view(source)
+  local view_mod = require("issuehub.ui.view")
+
+  if not source or source == "" then
+    -- "What I was just looking at" (§9.3).
+    local last = view_mod.last()
+    if last and not last:is_empty() then
+      return last
+    end
+    source = "local"
+  end
+
+  if source == "local" then
+    local items = require("issuehub.core.index").get():list({ closed = false })
+    return view_mod.new({ source = "query", label = "local", items = items })
+  elseif source == "all" then
+    return view_mod.new({ source = "query", label = "all", items = require("issuehub.core.index").get():list() })
+  elseif source == "bookmarks" then
+    local items = require("issuehub.core.index").get():list({ bookmarked = true })
+    return view_mod.new({ source = "bookmarks", label = "bookmarks", items = items })
+  elseif source == "changed" then
+    local items = require("issuehub.core.sync").changed_since_seen()
+    return view_mod.new({ source = "changed", label = "changed", items = items })
+  end
+
+  local view = require("issuehub.core.collection").to_view(source)
+  if view then
+    return view
+  end
+  return nil, ("unknown source '%s' (try a collection name, or local|all|bookmarks|changed)"):format(source)
+end
+
+---Export a View.
+---@param format string?
+---@param source string?
+---@param path string?
+function M.export(format, source, path)
+  local export = require("issuehub.core.export")
+  format = format or require("issuehub.config").get().export.default_format
+
+  local view, err = M.resolve_view(source)
+  if not view then
+    return vim.notify("issuehub: " .. tostring(err), vim.log.levels.ERROR)
+  end
+
+  local written, werr = export.write(format, view, { path = path })
+  if not written then
+    return vim.notify("issuehub: " .. tostring(werr), vim.log.levels.ERROR)
+  end
+  vim.notify(("issuehub: exported %d issue(s) to %s"):format(#view:get_selected(), written))
+end
+
+---Open a collection, or pick one when no name is given.
+---@param name string?
+function M.collection(name)
+  local collections = require("issuehub.core.collection")
+
+  if not name or name == "" then
+    local slugs = collections.list()
+    if #slugs == 0 then
+      return vim.notify("issuehub: no collections yet (`:IssueHub collection add <name>`)", vim.log.levels.INFO)
+    end
+    return vim.ui.select(slugs, { prompt = "Collection" }, function(chosen)
+      if chosen then
+        M.collection(chosen)
+      end
+    end)
+  end
+
+  local view = collections.to_view(name)
+  if not view then
+    return vim.notify(("issuehub: no collection '%s'"):format(name), vim.log.levels.ERROR)
+  end
+  if view:is_empty() then
+    return vim.notify(("issuehub: collection '%s' is empty"):format(name), vim.log.levels.INFO)
+  end
+  require("issuehub.ui.picker").pick(view, { title = ("%s (%d)"):format(view.label, view:count()) })
+end
+
+---Add issues to a collection: the current issue buffer, or the current View.
+---@param name string
+function M.collection_add(name)
+  local collections = require("issuehub.core.collection")
+  local uri = require("issuehub.ui.buffer").current_uri()
+
+  local uris = {}
+  if uri then
+    uris = { uri }
+  else
+    local view = require("issuehub.ui.view").last()
+    if not view or view:is_empty() then
+      return vim.notify("issuehub: open an issue or a picker first", vim.log.levels.WARN)
+    end
+    for _, item in ipairs(view:get_selected()) do
+      uris[#uris + 1] = item.uri
+    end
+  end
+
+  local added = 0
+  for _, member in ipairs(uris) do
+    if collections.add(name, member) then
+      added = added + 1
+    end
+  end
+  vim.notify(("issuehub: added %d issue(s) to '%s'"):format(added, name))
+end
+
+---@param name string
+function M.collection_remove(name)
+  local uri = require("issuehub.ui.buffer").current_uri()
+  if not uri then
+    return vim.notify("issuehub: not in an issue buffer", vim.log.levels.WARN)
+  end
+  if require("issuehub.core.collection").remove(name, uri) then
+    vim.notify(("issuehub: removed %s from '%s'"):format(uri, name))
+  else
+    vim.notify(("issuehub: %s is not in '%s'"):format(uri, name), vim.log.levels.WARN)
+  end
 end
 
 ---Open a specific issue URI.

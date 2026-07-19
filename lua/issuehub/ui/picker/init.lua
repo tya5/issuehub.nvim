@@ -67,6 +67,9 @@ end
 ---@param view issuehub.View
 ---@param opts table?
 function M.pick(view, opts)
+  -- Remember it before showing: export and collection commands operate on the
+  -- current view regardless of which picker rendered it.
+  require("issuehub.ui.view").set_last(view)
   M.get().pick(view, opts or {})
 end
 

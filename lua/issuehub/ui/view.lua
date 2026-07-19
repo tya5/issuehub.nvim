@@ -10,6 +10,23 @@ local M = {}
 local View = {}
 View.__index = View
 
+---The most recently shown View.
+---
+---This is what makes `:IssueHub export csv` act on "what I was just looking at"
+---without export knowing anything about pickers (§9.3).
+---@type issuehub.View?
+local last = nil
+
+---@param view issuehub.View
+function M.set_last(view)
+  last = view
+end
+
+---@return issuehub.View?
+function M.last()
+  return last
+end
+
 ---@param opts { source: string, label: string, items: issuehub.ViewItem[] }
 ---@return issuehub.View
 function M.new(opts)

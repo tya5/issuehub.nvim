@@ -25,13 +25,18 @@ end
 ---@param w { id: integer, status: integer }
 ---@return string
 function M.line(item, w)
-  return ("%s %-" .. w.id .. "s  %-" .. w.status .. "s  %s  %s"):format(
+  local line = ("%s %-" .. w.id .. "s  %-" .. w.status .. "s  %s  %s"):format(
     item.bookmarked and "*" or " ",
     item.id or "",
     item.status or "",
     M.date(item),
     item.title or ""
   )
+  -- Why this row matched, when the search knows (ripgrep path, §15).
+  if item.matched_in then
+    line = line .. ("  [%s]"):format(item.matched_in)
+  end
+  return line
 end
 
 ---Single-line form for vim.ui.select, which has no column support at all.

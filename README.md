@@ -11,10 +11,11 @@ every issue with a local, Git-managed workspace of notes, metadata, and analysis
 >
 > **Works today:** four providers — Jira, Redmine, GitHub, GitLab — caching, the
 > local index (JSON or SQLite+FTS5), the picker across all four UI backends,
-> local search, bookmarks, sync with change detection, and an issue buffer with
-> editable memo / metadata / prompt written back to your Git-managed workspace.
+> local search, bookmarks, collections, export, sync with change detection, and
+> an issue buffer with editable memo / metadata / prompt written back to your
+> Git-managed workspace.
 >
-> **Not yet:** collections and export (0.4), and AI backends (0.5).
+> **Not yet:** AI backends and analysis history (0.5).
 >
 > The public API may break between minor versions until 1.0.
 > See [DESIGN.md](DESIGN.md).
@@ -199,6 +200,7 @@ require("issuehub").setup({
 
   ui = { picker = "auto" },           -- "auto"|"snacks"|"fzf"|"telescope"|"select"
   sync = { on_open = "stale", stale_after = 900 },
+  export = { dir = nil, default_format = "markdown" },   -- dir defaults to cwd
   log_level = vim.log.levels.WARN,
 })
 ```
@@ -312,10 +314,12 @@ log file.
 ```vim
 :IssueHub open [uri]     " picker over the default query, or open a URI
 :IssueHub search <query> " provider-side search (JQL / GitHub qualifiers / ...)
-:IssueHub find <text>    " local search across the index
+:IssueHub find <text>    " local search; --regex forces the ripgrep path
 :IssueHub local          " everything already cached, offline
 :IssueHub sync [target]  " re-fetch and report what changed
 :IssueHub changed        " issues that moved since you last opened them
+:IssueHub collection ... " manage and open collections
+:IssueHub export [fmt] [source]
 :IssueHub refresh        " re-fetch the current issue buffer
 :IssueHub bookmark       " toggle a bookmark on the current issue
 :IssueHub bookmarks      " picker over bookmarked issues
@@ -386,6 +390,47 @@ Anything you typed in the editable sections is kept.
 **metadata.yaml is written back verbatim.** Comments, key order, and spacing
 survive exactly as you typed them — issuehub parses that file for search and
 export, but never reformats it.
+
+### Collections and export
+
+Collections are local, static, cross-provider lists — a sprint, a release, an
+investigation. They live in `.issuehub/collections/<slug>.yaml` and are committed
+with the rest of your workspace.
+
+```vim
+:IssueHub collection add Sprint A   " add the current issue (or picker selection)
+:IssueHub collection Sprint A       " open it in the picker
+:IssueHub collection list
+:IssueHub collection remove Sprint A
+```
+
+They are deliberately **static lists, not saved queries**: a list diffs cleanly
+in Git, and "why is this issue in here" always has a literal answer.
+
+```vim
+:IssueHub export                    " current view, default format
+:IssueHub export csv sprint-a       " a collection, as CSV
+:IssueHub export json bookmarks
+:IssueHub export markdown changed
+```
+
+Sources are a collection name or one of `local`, `all`, `bookmarks`, `changed`.
+With no source, export acts on **what you were just looking at** — the last view
+the picker showed.
+
+Output combines the latest *cached* issue with your workspace overlay:
+metadata keys are flattened to `meta.<key>`, multi-value fields join with `; `,
+and `fetched_at` is included so staleness travels with the data. Export performs
+no network I/O — run `:IssueHub sync` first if freshness matters.
+
+Markdown export keeps memos as prose under a `## Notes` heading rather than
+cramming multi-line text into table cells.
+
+Add your own format:
+
+```lua
+require("issuehub.core.export").register("xlsx", { ext = "xlsx", write = fn })
+```
 
 ### Staying current
 

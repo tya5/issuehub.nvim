@@ -47,12 +47,16 @@ local defaults = {
     retries = 2,
   },
 
+  export = {
+    dir = nil, -- defaults to the current working directory
+    default_format = "markdown",
+  },
+
   log_level = vim.log.levels.WARN,
 
-  -- NOTE: `backend`, `backends`, `export`, and `ui.preview` are deliberately
-  -- absent until the milestone that implements them (§22). Shipping them as
-  -- live defaults would mean setup({ backend = "a2a" }) is silently accepted
-  -- and ignored — worse than an unknown-key error.
+  -- NOTE: `backend` and `backends` are deliberately absent until 0.5 implements
+  -- them. Shipping them as live defaults would mean setup({ backend = "a2a" })
+  -- is silently accepted and ignored — worse than an unknown-key error.
 }
 
 ---Keys that are planned but not yet wired up. Passing one is a user error
@@ -60,7 +64,6 @@ local defaults = {
 local NOT_YET = {
   backend = "0.5",
   backends = "0.5",
-  export = "0.4",
   workspace_dir = "renamed to `workspace`",
 }
 
@@ -142,6 +145,10 @@ local function validate(opts, raw)
     if path and not require("issuehub.util.fs").exists(vim.fn.expand(path)) then
       errors[#errors + 1] = ("http.%s does not exist: %s"):format(field, path)
     end
+  end
+
+  if opts.export.default_format ~= nil and type(opts.export.default_format) ~= "string" then
+    errors[#errors + 1] = "export.default_format must be a string"
   end
 
   -- Self-hosted-only providers have no sensible default host; the SaaS ones do.
