@@ -85,8 +85,34 @@ it is missing, rather than failing later.
 
 Calling `setup()` is not required for the plugin to load — only for provider
 credentials, which have no sensible default. With lazy.nvim, `opts = {}` calls
-it for you and no `cmd` or `event` is needed: `plugin/issuehub.lua` registers
-commands and defers every `require`, so the plugin lazy-loads itself.
+it for you, and no `cmd` or `event` is needed: `plugin/issuehub.lua` registers
+commands and defers every `require`, so loading it costs practically nothing.
+
+                                                    *issuehub-lazy-keys*
+If you add `keys` to the lazy.nvim spec, add `lazy = false` as well: >lua
+    {
+      "tya5/issuehub.nvim",
+      lazy = false,
+      keys = { { "<leader>ji", "<Plug>(IssueHubOpen)" } },
+      opts = { ... },
+    }
+<
+Specifying `keys` (or `cmd`, `event`, `ft`) switches lazy.nvim into deferred
+mode for the whole plugin. `:IssueHub` would then not exist, and
+`:checkhealth issuehub` would report "No healthcheck found", until one of
+those keys was pressed. `lazy = false` avoids that and costs nothing here,
+because the startup file requires no implementation modules.
+
+                                                    *issuehub-gh-token*
+For GitHub, reuse the login you already have instead of storing a token: >lua
+    providers = {
+      github = {
+        token_cmd = { "gh", "auth", "token" },
+        default_query = "is:issue is:open involves:@me",
+      },
+    }
+<
+`glab auth token` does the same for GitLab.
 
 ==============================================================================
 4. CONFIGURATION                                          *issuehub-config*

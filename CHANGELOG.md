@@ -8,6 +8,17 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ## [Unreleased]
 
+### Documentation
+
+- Install instructions now cover a trap found while installing into a real
+  LazyVim config: adding `keys` to the lazy.nvim spec switches the whole plugin
+  into deferred mode, so `:IssueHub` does not exist and `:checkhealth issuehub`
+  reports "No healthcheck found" until one of those keys is pressed. The fix is
+  `lazy = false`, which costs nothing here because the startup file requires no
+  implementation modules. README and `:help issuehub-lazy-keys`.
+- Documented `token_cmd = { "gh", "auth", "token" }` (and `glab auth token`),
+  which reuses an existing CLI login and stores no credential anywhere.
+
 ### Added
 
 - **Documentation and the public API surface (0.7).**

@@ -133,10 +133,10 @@ label: Jira's `statusCategory`, Redmine's `/issue_statuses.json`, and the
   opts = {
     workspace = "~/notes/issuehub",
     providers = {
-      jira = {
-        url = "https://your-org.atlassian.net",
-        user = "you@example.com",   -- Jira Cloud only
-        token_env = "JIRA_TOKEN",
+      github = {
+        -- Reuses your existing `gh` login; no token stored anywhere.
+        token_cmd = { "gh", "auth", "token" },
+        default_query = "is:issue is:open involves:@me",
       },
     },
   },
@@ -144,7 +144,74 @@ label: Jira's `statusCategory`, Redmine's `/issue_statuses.json`, and the
 ```
 
 No `cmd` or `event` is needed: `plugin/issuehub.lua` only registers commands and
-defers every `require`, so the plugin lazy-loads itself.
+defers every `require`, so loading it costs practically nothing and lazy.nvim
+treats a spec like the one above as eager.
+
+> **If you add `keys`, add `lazy = false` too.**
+>
+> ```lua
+> {
+>   "tya5/issuehub.nvim",
+>   lazy = false,                     -- ← required once `keys` is present
+>   keys = { { "<leader>ji", "<Plug>(IssueHubOpen)", desc = "Issues" } },
+>   opts = { ... },
+> }
+> ```
+>
+> Specifying `keys` (or `cmd`/`event`/`ft`) switches lazy.nvim into deferred
+> mode for the whole plugin, so `:IssueHub` would not exist and
+> `:checkhealth issuehub` would report *"No healthcheck found"* until you first
+> pressed one of those keys. `lazy = false` avoids that at no real cost, because
+> the startup file requires nothing.
+
+<details>
+<summary>Full example: LazyVim, GitHub via <code>gh</code>, with keymaps</summary>
+
+```lua
+return {
+  {
+    "tya5/issuehub.nvim",
+    lazy = false,
+    opts = {
+      workspace = "~/notes/issuehub",
+      providers = {
+        github = {
+          token_cmd = { "gh", "auth", "token" },
+          default_query = "is:issue is:open involves:@me",
+        },
+      },
+    },
+    keys = {
+      { "<leader>ji", "<Plug>(IssueHubOpen)", desc = "Issues (issuehub)" },
+      { "<leader>jf", "<Plug>(IssueHubFind)", desc = "Find in issue notes" },
+      { "<leader>jr", "<Plug>(IssueHubRefresh)", desc = "Refresh issue" },
+      { "<leader>jb", "<cmd>IssueHub bookmarks<cr>", desc = "Bookmarked issues" },
+      { "<leader>jc", "<cmd>IssueHub changed<cr>", desc = "Changed since last seen" },
+    },
+  },
+  {
+    "folke/which-key.nvim",
+    optional = true,
+    opts = { spec = { { "<leader>j", group = "issues" } } },
+  },
+}
+```
+
+</details>
+
+### After installing
+
+```vim
+:checkhealth issuehub
+```
+
+Everything should be green except a note that your workspace is not a Git
+repository. It works either way, but the whole point is that your notes are
+committable:
+
+```sh
+git -C ~/notes/issuehub init
+```
 
 </details>
 
@@ -308,6 +375,9 @@ token = function() ... end                      -- 1. escape hatch
 token_cmd = { "op", "read", "op://vault/jira" } -- 2. password manager
 token_env = "JIRA_TOKEN"                        -- 3. environment
 ```
+
+For GitHub, `token_cmd = { "gh", "auth", "token" }` reuses the login you already
+have and stores nothing. For GitLab, `glab auth token` does the same.
 
 Tokens are cached in memory for the session only, are passed to curl on **stdin**
 (never argv, so `ps` cannot see them), and are unconditionally redacted from the
