@@ -264,23 +264,63 @@ function Sqlite:list(filter)
   return vim.tbl_map(to_item, rows)
 end
 
----Column indices in issues_fts, for per-column match attribution.
-local FTS_COLUMNS = { { 1, "title" }, { 2, "description" }, { 3, "memo" }, { 4, "metadata" }, { 5, "analyses" } }
+---Columns of issues_fts that hold searchable text.
+local FTS_COLUMNS = { "title", "description", "memo", "metadata", "analyses" }
 
-local MARK = "\2"
-
----Which columns a row matched, using snippet() markers.
+---Alphanumeric terms from a query, for match attribution.
 ---
---- FTS5 has no direct "which column matched", but a snippet with a marker that
---- cannot occur in real text answers it in the same query.
+--- The query may contain FTS5 operators (AND, NEAR, quotes); those belong in the
+--- MATCH clause, not in working out which column a hit came from.
+---@param query string
+---@return string[]
+local function terms_of(query)
+  local skip = { ["and"] = true, ["or"] = true, ["not"] = true, ["near"] = true }
+  local terms = {}
+  for word in query:lower():gmatch("[%w_]+") do
+    if #word > 1 and not skip[word] then
+      terms[#terms + 1] = word
+      if #terms == 3 then
+        break
+      end
+    end
+  end
+  return terms
+end
+
+---SQL expressions marking which columns contain the query terms.
+---
+--- An earlier version detected this with snippet() markers. That turned out to
+--- depend on the sqlite3 build — it worked locally and produced no markers on
+--- the CI runner — so attribution now uses instr(), which behaves identically
+--- everywhere.
+---@param query string
+---@return string select_list
+local function attribution_columns(query)
+  local terms = terms_of(query)
+  local parts = {}
+
+  for _, column in ipairs(FTS_COLUMNS) do
+    if #terms == 0 then
+      parts[#parts + 1] = ("0 AS hit_%s"):format(column)
+    else
+      local tests = {}
+      for _, term in ipairs(terms) do
+        tests[#tests + 1] = ("instr(lower(f.%s), %s) > 0"):format(column, q(term))
+      end
+      parts[#parts + 1] = ("(CASE WHEN %s THEN 1 ELSE 0 END) AS hit_%s"):format(table.concat(tests, " OR "), column)
+    end
+  end
+
+  return table.concat(parts, ", ")
+end
+
 ---@param row table
 ---@return string?
 local function matched_columns(row)
   local fields = {}
   for _, column in ipairs(FTS_COLUMNS) do
-    local snippet = row["snip_" .. column[2]]
-    if type(snippet) == "string" and snippet:find(MARK, 1, true) then
-      fields[#fields + 1] = column[2]
+    if row["hit_" .. column] == 1 then
+      fields[#fields + 1] = column
     end
   end
   if #fields == 0 then
@@ -295,21 +335,12 @@ end
 function Sqlite:search(query)
   self:_ensure()
   if self:has_fts() then
-    local snippets = {}
-    for _, column in ipairs(FTS_COLUMNS) do
-      snippets[#snippets + 1] = ("snippet(issues_fts, %d, '%s', '', '…', 8) AS snip_%s"):format(
-        column[1],
-        MARK,
-        column[2]
-      )
-    end
-
     local rows = self:_exec(([[
       SELECT i.*, %s FROM issues_fts f
       JOIN issues i ON i.uri = f.uri
       WHERE issues_fts MATCH %s
       ORDER BY rank;
-    ]]):format(table.concat(snippets, ", "), q(query)))
+    ]]):format(attribution_columns(query), q(query)))
 
     if rows then
       return vim.tbl_map(function(row)
