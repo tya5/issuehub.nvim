@@ -214,7 +214,8 @@ pollute the global command namespace.
 :IssueHub find [{text}]   Local search. With no argument, browses everything
                           local and filters in the picker. Accepts `--regex`
                           and `--meta`. See |issuehub-find-syntax|.
-:IssueHub local           Everything already cached. Works offline.
+:IssueHub local [{provider}]
+                          That server's cached issues. Works offline.
 :IssueHub fetch [{provider}]
                           Walk a server's whole query into the cache, page by
                           page, in the background. Per server: with several
@@ -418,8 +419,13 @@ Two distinct operations: >
 <
                                                         *issuehub-find-shape*
 <Plug>(IssueHubOpen) and <Plug>(IssueHubFind) have the same shape: the picker
-opens immediately and typing filters it. Only the corpus differs — the
-provider's query versus everything already local. In both, your memo and
+opens immediately and typing filters it. Only the corpus differs — that
+server's query versus its issues you already have locally.
+
+Both are PER SERVER. With more than one configured you are asked which; with
+one you are not. Nothing is loaded from the others: mixing trackers in one
+list makes ids ambiguous to scan, and a filter term mean different things on
+different servers. In both, your memo and
 metadata ride along on each row as hidden match text, so typing a word that
 appears only in your notes still narrows the list. Neither prompts.
 

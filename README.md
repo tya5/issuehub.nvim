@@ -28,13 +28,15 @@ A walkthrough, from nothing to a workspace worth keeping.
 **1. Find something to work on.**
 
 ```
-<leader>ji          the provider's query, fetched now
-<leader>jf          everything already local, offline
+<leader>ji          that server's query, fetched now
+<leader>jf          that server's issues, already local
 ```
 
-Both open the same picker and filter as you type. `ji` asks the server; `jf`
+Both open the same picker and filter as you type — `ji` asks the server, `jf`
 asks your machine and also searches what you wrote. Type `status:open`,
 `priority:high`, or any word from your own notes.
+
+Both are **per server**: with several configured you pick one first.
 
 **2. Open it.** `<CR>` in the picker. The issue is on top, read-only, labelled
 as such. Below the divider is your workspace.
@@ -611,8 +613,13 @@ opens straight away and typing filters it. Only the corpus differs.
 
 | | Corpus | Typing filters over |
 | --- | --- | --- |
-| `IssueHubOpen` | the provider's query, fetched now | ID, status, title, and your notes |
-| `IssueHubFind` | everything already local, offline | the same |
+| `IssueHubOpen` | that server's query, fetched now | ID, status, title, and your notes |
+| `IssueHubFind` | that server's issues, already local | the same |
+
+**Both are per server.** With more than one configured you are asked which; with
+one, you are not. Nothing loads from the others: mixing trackers in a single
+list makes IDs ambiguous to scan, and a filter term means different things on
+different servers.
 
 Your memo and metadata ride along on each row as hidden match text, so typing
 `認証` finds an issue whose *notes* mention it even though nothing on screen

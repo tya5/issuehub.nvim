@@ -33,27 +33,43 @@ function M.setup(opts)
   end
 end
 
+---Resolve which server an operation applies to.
+---
+---Every per-server entry point goes through here, so they cannot drift into
+---asking differently — or, worse, into one of them quietly picking the first.
+---@param name string?              Explicit choice; skips the prompt.
+---@param prompt string
+---@param cb fun(provider_name: string)
+function M.with_provider(name, prompt, cb)
+  local names = require("issuehub.provider").configured_names()
+  if #names == 0 then
+    return vim.notify("issuehub: no providers configured", vim.log.levels.ERROR)
+  end
+  if name then
+    return cb(name)
+  end
+  if #names == 1 then
+    return cb(names[1])
+  end
+  vim.ui.select(names, { prompt = prompt }, function(chosen)
+    if chosen then
+      cb(chosen)
+    end
+  end)
+end
+
 ---Open the picker over a provider's default query.
 ---@param opts { provider: string?, query: any? }?
 function M.open(opts)
   opts = opts or {}
   local providers = require("issuehub.provider")
 
-  local name = opts.provider
-  if not name then
-    local names = providers.configured_names()
-    if #names == 0 then
-      return vim.notify("issuehub: no providers configured", vim.log.levels.ERROR)
-    end
-    if #names > 1 and not opts.query then
-      return vim.ui.select(names, { prompt = "Provider" }, function(chosen)
-        if chosen then
-          M.open(vim.tbl_extend("force", opts, { provider = chosen }))
-        end
-      end)
-    end
-    name = names[1]
+  if not opts.provider then
+    return M.with_provider(nil, "Issues from", function(chosen)
+      M.open(vim.tbl_extend("force", opts, { provider = chosen }))
+    end)
   end
+  local name = opts.provider
 
   local provider, err = providers.get(name)
   if not provider then
@@ -131,26 +147,12 @@ end
 ---@param opts { resume: boolean?, query: any? }?
 function M.fetch_all(provider_name, opts)
   opts = opts or {}
-  local providers = require("issuehub.provider")
-  local names = providers.configured_names()
-  if #names == 0 then
-    return vim.notify("issuehub: no providers configured", vim.log.levels.ERROR)
+  if not provider_name then
+    return M.with_provider(nil, "Fetch all issues from", function(chosen)
+      M.fetch_all(chosen, opts)
+    end)
   end
-
-  -- Caching a whole backlog is per server, and with several configured the
-  -- choice is not one to guess at: each is a different amount of traffic
-  -- against a different system.
   local name = provider_name
-  if not name then
-    if #names > 1 then
-      return vim.ui.select(names, { prompt = "Fetch all issues from" }, function(chosen)
-        if chosen then
-          M.fetch_all(chosen, opts)
-        end
-      end)
-    end
-    name = names[1]
-  end
 
   local fetch = require("issuehub.core.fetch")
   local listcache = require("issuehub.core.listcache")
@@ -219,15 +221,24 @@ end
 ---The counterpart to |issuehub.open()|: same UI, different corpus. Typing in
 ---the picker reaches memo and metadata because those ride along on each item as
 ---hidden match text, so this needs no prompt of its own.
-function M.browse()
-  local items = require("issuehub.core.index").get():list()
-  if #items == 0 then
-    return vim.notify("issuehub: nothing cached yet — run `:IssueHub open` first", vim.log.levels.INFO)
-  end
+---@param provider_name string?
+function M.browse(provider_name)
+  M.with_provider(provider_name, "Browse local issues from", function(name)
+    -- Scoped to one server, like `open`. Nothing is loaded from the others:
+    -- mixing trackers in one list makes the ids ambiguous to scan and the
+    -- filter terms mean different things per server.
+    local items = require("issuehub.core.index").get():list({ provider = name })
+    if #items == 0 then
+      return vim.notify(
+        ("issuehub: nothing cached for %s yet — `:IssueHub open` or `:IssueHub fetch` first"):format(name),
+        vim.log.levels.INFO
+      )
+    end
 
-  local view_mod = require("issuehub.ui.view")
-  local view = view_mod.new({ source = "find", label = "local", items = view_mod.with_notes(items) })
-  require("issuehub.ui.picker").pick(view, { title = ("local (%d)"):format(#items) })
+    local view_mod = require("issuehub.ui.view")
+    local view = view_mod.new({ source = "find", label = name, items = view_mod.with_notes(items) })
+    require("issuehub.ui.picker").pick(view, { title = ("%s local (%d)"):format(name, #items) })
+  end)
 end
 
 ---Local search, with optional metadata filters.
@@ -427,11 +438,14 @@ function M.open_uri(uri)
 end
 
 ---Everything currently in the local index.
-function M.local_issues()
-  local view_mod = require("issuehub.ui.view")
-  local items = view_mod.with_notes(require("issuehub.core.index").get():list({ closed = false }))
-  local view = view_mod.new({ source = "query", label = "local", items = items })
-  require("issuehub.ui.picker").pick(view, { title = ("local (%d)"):format(#items) })
+---@param provider_name string?
+function M.local_issues(provider_name)
+  M.with_provider(provider_name, "Local issues from", function(name)
+    local view_mod = require("issuehub.ui.view")
+    local items = view_mod.with_notes(require("issuehub.core.index").get():list({ closed = false, provider = name }))
+    local view = view_mod.new({ source = "query", label = name, items = items })
+    require("issuehub.ui.picker").pick(view, { title = ("%s local (%d)"):format(name, #items) })
+  end)
 end
 
 ---Everything bookmarked, across providers.

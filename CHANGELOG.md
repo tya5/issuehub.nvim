@@ -8,6 +8,16 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ## [Unreleased]
 
+### Changed
+
+- **`open`, `find`/browse, `local`, and `fetch` are all per server.** Browsing
+  local issues previously merged every provider into one list while `open` asked
+  which server to query — an asymmetry, and the merged list was the worse half:
+  ids from different trackers are ambiguous to scan and a filter term means
+  different things on each. All four now route through one `with_provider`
+  helper, so they ask identically and cannot drift apart. With a single provider
+  configured, nothing prompts.
+
 ## [0.1.0] — 2026-07-19
 
 First release. Nothing was published before this, so it covers the whole of

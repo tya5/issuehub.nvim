@@ -211,7 +211,28 @@ describe("empty search", function()
     assert.is_true(browsed)
   end)
 
-  it("says so when there is nothing cached to browse", function()
+  it("says so when there is nothing cached for that server", function()
+    config.setup({
+      workspace = vim.fn.tempname(),
+      index = "json",
+      providers = { jira = { url = "https://example.atlassian.net", token_env = "X" } },
+    })
+    require("issuehub.core.index").reset()
+    repository.ensure()
+
+    local notified
+    local original = vim.notify
+    vim.notify = function(msg)
+      notified = msg
+    end
+    -- One provider configured, so no prompt: it goes straight through.
+    require("issuehub").browse()
+    vim.notify = original
+
+    assert.truthy(notified and notified:find("nothing cached for jira"))
+  end)
+
+  it("reports when no provider is configured at all", function()
     config.setup({ workspace = vim.fn.tempname(), index = "json" })
     require("issuehub.core.index").reset()
     repository.ensure()
@@ -224,6 +245,88 @@ describe("empty search", function()
     require("issuehub").browse()
     vim.notify = original
 
-    assert.truthy(notified and notified:find("nothing cached yet"))
+    assert.truthy(notified and notified:find("no providers configured"))
+  end)
+end)
+
+describe("per-server scoping", function()
+  local issuehub = require("issuehub")
+
+  before_each(function()
+    config.setup({
+      workspace = vim.fn.tempname(),
+      index = "json",
+      providers = {
+        jira = { url = "https://example.atlassian.net", token_env = "X" },
+        github = { token_env = "Y" },
+      },
+    })
+    require("issuehub.core.index").reset()
+    repository.ensure()
+
+    for _, spec in ipairs({ { "jira", "PROJ-1" }, { "jira", "PROJ-2" }, { "github", "o%2Fr%231" } }) do
+      cache.put(issue_mod.normalize({
+        provider = spec[1],
+        id = spec[2],
+        title = "issue " .. spec[2],
+        status = { id = "1", name = "Open" },
+        updated_at = "2026-07-19T10:00:00Z",
+      }))
+    end
+  end)
+
+  it("asks which server when several are configured", function()
+    local asked
+    local original = vim.ui.select
+    vim.ui.select = function(items, opts)
+      asked = { items = items, prompt = opts.prompt }
+    end
+    issuehub.browse()
+    vim.ui.select = original
+
+    assert.truthy(asked)
+    table.sort(asked.items)
+    assert.same({ "github", "jira" }, asked.items)
+  end)
+
+  it("shows only that server's issues", function()
+    local shown
+    local picker = require("issuehub.ui.picker")
+    local original = picker.pick
+    picker.pick = function(view)
+      shown = view
+    end
+    issuehub.browse("jira")
+    picker.pick = original
+
+    -- Mixing trackers in one list makes ids ambiguous and filter terms mean
+    -- different things per server, so each entry point is scoped.
+    assert.equals(2, shown:count())
+    for _, item in ipairs(shown:get_items()) do
+      assert.truthy(item.uri:find("^jira://"))
+    end
+  end)
+
+  it("does not prompt when only one server is configured", function()
+    config.setup({
+      workspace = config.get().workspace,
+      index = "json",
+      providers = { jira = { url = "https://example.atlassian.net", token_env = "X" } },
+    })
+    require("issuehub.core.index").reset()
+
+    local prompted = false
+    local original = vim.ui.select
+    vim.ui.select = function()
+      prompted = true
+    end
+    local picker = require("issuehub.ui.picker")
+    local pick = picker.pick
+    picker.pick = function() end
+    issuehub.browse()
+    picker.pick = pick
+    vim.ui.select = original
+
+    assert.is_false(prompted)
   end)
 end)

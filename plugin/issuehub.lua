@@ -58,8 +58,8 @@ local subcommands = {
     require("issuehub").find(require("issuehub.core.query").parse(args))
   end,
 
-  ["local"] = function()
-    require("issuehub").local_issues()
+  ["local"] = function(args)
+    require("issuehub").local_issues(args[1])
   end,
 
   refresh = function()
