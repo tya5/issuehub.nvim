@@ -10,6 +10,34 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ### Added
 
+- **Backends and analysis history (0.5).** AI is opt-in and routed through a
+  single interface; the default `none` backend sends nothing anywhere.
+  - **Requests carry a `kind`** and backends advertise which kinds they handle,
+    so LLM completion slots in without the interface moving. `backend.complete()`
+    is a documented extension point that nothing in issuehub calls yet. A request
+    of an unadvertised kind is refused clearly rather than sent and
+    misunderstood.
+  - **A2A backend**, loaded only when selected: agent-card discovery plus
+    `message/send`, message-only by design. Not yet exercised against a live
+    agent — treat it as a starting point.
+  - **Analysis history** under `analyses/<timestamp>/` with prompt, response, and
+    the issue revision it describes. **Staleness is derived from that revision,
+    never stored**, so it survives manual edits, `git revert`, and syncs that
+    happen while Neovim is closed. Shown in the issue header.
+  - An outdated analysis is never fed back in as context, since that would
+    propagate its staleness.
+  - `:IssueHub analyze` / `:IssueHub analyses`; `backend` / `backends` config.
+
+### Fixed
+
+- Opening an issue showed neither the "changed since you last looked" nor the
+  analysis-staleness header line: `M.open` — the primary path — was the one call
+  site not passing render options. Only the refresh path showed them, which is
+  why earlier testing missed it.
+- With `backend = "none"`, requests failed with "backend 'none' does not handle
+  'analyze' (it handles: )" instead of the actionable "no backend configured"
+  message. A backend advertising no kinds is now allowed to explain itself.
+
 - **Collections, export, and the ripgrep search path (0.4).**
   - **Collections** are local, static, cross-provider lists stored as YAML under
     `.issuehub/collections/` and committed with the workspace. Static lists

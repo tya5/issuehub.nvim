@@ -83,6 +83,8 @@
 ---@field ui issuehub.UIConfig
 ---@field sync issuehub.SyncConfig
 ---@field export issuehub.ExportConfig
+---@field backend string
+---@field backends table<string, table>
 ---@field http issuehub.HttpConfig
 ---@field log_level integer
 

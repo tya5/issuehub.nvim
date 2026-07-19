@@ -17,6 +17,7 @@ function M.setup(opts)
   require("issuehub.provider").reset()
   require("issuehub.core.index").reset()
   require("issuehub.ui.picker").reset()
+  require("issuehub.backend").reset()
 
   if #errors > 0 then
     vim.notify("issuehub: invalid configuration\n  - " .. table.concat(errors, "\n  - "), vim.log.levels.ERROR)
@@ -345,6 +346,78 @@ function M.changed()
   end
   local view = require("issuehub.ui.view").new({ source = "changed", label = "changed", items = items })
   require("issuehub.ui.picker").pick(view, { title = ("changed (%d)"):format(#items) })
+end
+
+---Analyse an issue through the configured Backend and save the result.
+---@param uri string?
+---@param opts { prompt: string?, selection: string?, include_history: boolean? }?
+function M.analyze(uri, opts)
+  opts = opts or {}
+  uri = uri or require("issuehub.ui.buffer").current_uri()
+  if not uri then
+    return vim.notify("issuehub: open an issue first, or pass a URI", vim.log.levels.WARN)
+  end
+
+  local analysis = require("issuehub.core.analysis")
+  local backend = require("issuehub.backend")
+
+  local prompt, source = opts.prompt, "ad-hoc"
+  if not prompt then
+    prompt, source = analysis.prompt_for(uri)
+  end
+
+  vim.notify(("issuehub: analysing %s…"):format(uri))
+
+  backend.send({
+    kind = "analyze",
+    resource = uri,
+    prompt = prompt,
+    context = analysis.context(uri, { selection = opts.selection, include_history = opts.include_history }),
+  }, {}, function(err, res)
+    if err then
+      return vim.notify("issuehub: " .. err, vim.log.levels.ERROR)
+    end
+
+    local active = select(1, backend.get())
+    local stamp, serr = analysis.save(uri, {
+      prompt = prompt,
+      response = res.text,
+      backend = active and active.name or nil,
+      model = res.model,
+      prompt_source = source,
+    })
+    if not stamp then
+      return vim.notify("issuehub: could not save the analysis — " .. tostring(serr), vim.log.levels.ERROR)
+    end
+
+    vim.notify(("issuehub: analysis saved (%s)"):format(stamp))
+    require("issuehub.ui.analysis").open(uri, stamp)
+  end)
+end
+
+---Browse the analysis history of an issue.
+---@param uri string?
+function M.analyses(uri)
+  uri = uri or require("issuehub.ui.buffer").current_uri()
+  if not uri then
+    return vim.notify("issuehub: open an issue first", vim.log.levels.WARN)
+  end
+
+  local entries = require("issuehub.core.analysis").list(uri)
+  if #entries == 0 then
+    return vim.notify("issuehub: no analyses yet for " .. uri, vim.log.levels.INFO)
+  end
+
+  vim.ui.select(entries, {
+    prompt = "Analyses",
+    format_item = function(entry)
+      return ("%s  [%s]  %s"):format(entry.stamp, entry.status, entry.model or entry.backend or "")
+    end,
+  }, function(entry)
+    if entry then
+      require("issuehub.ui.analysis").open(uri, entry.stamp)
+    end
+  end)
 end
 
 ---@return integer count

@@ -52,18 +52,18 @@ local defaults = {
     default_format = "markdown",
   },
 
-  log_level = vim.log.levels.WARN,
+  -- AI is opt-in. With "none", nothing is ever sent anywhere.
+  backend = "none",
+  backends = {
+    -- a2a = { url = "http://localhost:9100", token_env = "A2A_TOKEN" },
+  },
 
-  -- NOTE: `backend` and `backends` are deliberately absent until 0.5 implements
-  -- them. Shipping them as live defaults would mean setup({ backend = "a2a" })
-  -- is silently accepted and ignored — worse than an unknown-key error.
+  log_level = vim.log.levels.WARN,
 }
 
 ---Keys that are planned but not yet wired up. Passing one is a user error
 ---worth surfacing, not a no-op.
 local NOT_YET = {
-  backend = "0.5",
-  backends = "0.5",
   workspace_dir = "renamed to `workspace`",
 }
 
@@ -149,6 +149,12 @@ local function validate(opts, raw)
 
   if opts.export.default_format ~= nil and type(opts.export.default_format) ~= "string" then
     errors[#errors + 1] = "export.default_format must be a string"
+  end
+
+  if type(opts.backend) ~= "string" then
+    errors[#errors + 1] = "backend must be a string"
+  elseif opts.backend == "a2a" and not (opts.backends.a2a or {}).url then
+    errors[#errors + 1] = "backend = 'a2a' requires backends.a2a.url"
   end
 
   -- Self-hosted-only providers have no sensible default host; the SaaS ones do.

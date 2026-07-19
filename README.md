@@ -11,11 +11,11 @@ every issue with a local, Git-managed workspace of notes, metadata, and analysis
 >
 > **Works today:** four providers — Jira, Redmine, GitHub, GitLab — caching, the
 > local index (JSON or SQLite+FTS5), the picker across all four UI backends,
-> local search, bookmarks, collections, export, sync with change detection, and
-> an issue buffer with editable memo / metadata / prompt written back to your
-> Git-managed workspace.
+> local search, bookmarks, collections, export, sync with change detection,
+> optional AI backends with saved analysis history, and an issue buffer with
+> editable memo / metadata / prompt written back to your Git-managed workspace.
 >
-> **Not yet:** AI backends and analysis history (0.5).
+> **Not yet:** FTS5 indexing of note bodies (0.6), vimdoc and API freeze (0.7).
 >
 > The public API may break between minor versions until 1.0.
 > See [DESIGN.md](DESIGN.md).
@@ -201,6 +201,9 @@ require("issuehub").setup({
   ui = { picker = "auto" },           -- "auto"|"snacks"|"fzf"|"telescope"|"select"
   sync = { on_open = "stale", stale_after = 900 },
   export = { dir = nil, default_format = "markdown" },   -- dir defaults to cwd
+
+  backend = "none",                   -- "none" | "a2a" | your own
+  backends = {},
   log_level = vim.log.levels.WARN,
 })
 ```
@@ -320,6 +323,8 @@ log file.
 :IssueHub changed        " issues that moved since you last opened them
 :IssueHub collection ... " manage and open collections
 :IssueHub export [fmt] [source]
+:IssueHub analyze        " analyse via the configured backend
+:IssueHub analyses       " analysis history for the current issue
 :IssueHub refresh        " re-fetch the current issue buffer
 :IssueHub bookmark       " toggle a bookmark on the current issue
 :IssueHub bookmarks      " picker over bookmarked issues
@@ -475,6 +480,84 @@ you annotated months ago is still tracked even if it fell out of the cache.
 Bookmarks live in `state.yaml` next to your notes, so they are part of what you
 commit, not derived state that a reindex can lose.
 
+## AI backends (optional)
+
+**issuehub has no AI of its own.** A Backend is the only channel through which
+anything leaves your machine, and the default is `none`: nothing is sent
+anywhere unless you configure it.
+
+```lua
+backend = "a2a",
+backends = {
+  a2a = { url = "http://localhost:9100", token_env = "A2A_TOKEN" },
+},
+```
+
+```vim
+:IssueHub analyze        " analyse the current issue, save the result
+:IssueHub analyses       " browse this issue's analysis history
+```
+
+The request carries the cached issue plus your workspace overlay, and the prompt
+comes from the issue's own `prompt.md` when you have written one — otherwise a
+sensible default.
+
+### Analysis history and staleness
+
+Every analysis is kept under `analyses/<timestamp>/` with its prompt, its
+response, and the issue revision it was made against.
+
+**Staleness is derived, never stored.** An analysis is `current` when the
+recorded revision matches the cached issue and `outdated` otherwise — so it
+cannot go wrong after a manual edit, a `git revert`, or a sync that happened
+while Neovim was closed. The issue header shows it:
+
+```
+- Analysis: 2026-07-19T11-17-00Z (outdated)
+```
+
+An outdated analysis is also never fed back in as context for a new one, since
+that would propagate its staleness.
+
+### Writing your own backend
+
+The interface anticipates more than issue analysis. Requests carry a **kind**,
+and a backend advertises which kinds it handles — so an LLM client slots in
+without the interface moving:
+
+```lua
+require("issuehub.backend").register("my-llm", {
+  name = "my-llm",
+  setup = function(self, opts) return true end,
+  capabilities = function()
+    return { kinds = { "analyze", "complete" }, streaming = true, models = { "..." } }
+  end,
+  discover = function(self, cb) cb(nil, self:capabilities()) end,
+  health = function() return true, "ready" end,
+  send = function(self, req, opts, cb)
+    -- req.kind, req.prompt, req.context.{issue,overlay,selection,documents}
+    -- opts.on_chunk(text) for streaming; call cb(nil, { text = ..., model = ... })
+  end,
+})
+```
+
+Free-form completion is reachable through the same interface:
+
+```lua
+require("issuehub.backend").complete("Draft a release note.", {}, function(err, res)
+  print(res.text)
+end)
+```
+
+Nothing in issuehub calls `complete()` yet — it exists so an LLM backend can be
+dropped in and driven by your own code, or by a future feature, without the
+contract changing. Requests of a kind the backend does not advertise are refused
+with a clear message rather than sent and misunderstood.
+
+> The bundled A2A backend is written against the JSON-RPC `message/send` shape
+> with agent-card discovery, but has **not been exercised against a live agent**.
+> Treat it as a starting point and please report mismatches.
+
 ## Workspace layout
 
 Only what belongs in Git lives at the root; everything derived is under
@@ -489,7 +572,8 @@ Only what belongs in Git lives at the root; everything derived is under
 │   ├── metadata.yaml          # free-form key/value
 │   ├── prompt.md              # analysis prompt
 │   ├── state.yaml             # bookmark, last-seen revision
-│   └── analyses/                                            # (0.5)
+│   └── analyses/
+│       └── 2026-07-19T11-17-00Z/  # prompt.md, response.md, metadata.yaml
 └── redmine/12345/
 ```
 

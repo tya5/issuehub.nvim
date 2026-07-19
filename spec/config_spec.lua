@@ -13,11 +13,24 @@ describe("config validation", function()
   end)
 
   it("rejects keys that are accepted-but-ignored", function()
-    -- Silently swallowing setup({ backend = "a2a" }) is worse than erroring.
+    -- Silently swallowing a setting that does nothing is worse than erroring.
+    local errors = config.setup({ workspace = vim.fn.tempname(), workspace_dir = "/old/path" })
+    assert.truthy(vim.iter(errors):any(function(e)
+      return e:find("`workspace_dir` is not implemented yet")
+    end))
+  end)
+
+  it("accepts a backend now that one exists, but demands its url", function()
     local errors = config.setup({ workspace = vim.fn.tempname(), backend = "a2a" })
     assert.truthy(vim.iter(errors):any(function(e)
-      return e:find("`backend` is not implemented yet")
+      return e:find("requires backends.a2a.url")
     end))
+
+    assert.equals(0, #config.setup({
+      workspace = vim.fn.tempname(),
+      backend = "a2a",
+      backends = { a2a = { url = "http://localhost:9100" } },
+    }))
   end)
 
   it("validates enums", function()

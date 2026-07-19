@@ -125,6 +125,8 @@ local function render_opts(uri)
   return {
     changed_since_seen = workspace.changed_since_seen(uri),
     seen_at = state.last_seen_updated_at,
+    -- Whether the newest analysis still describes the issue as it is now.
+    analysis = require("issuehub.core.analysis").latest(uri),
   }
 end
 
@@ -273,7 +275,9 @@ function M.open(uri)
   end
 
   if entry then
-    paint(buf, render.issue(entry.issue, entry, overlay_mod.read(uri)), uri)
+    -- render_opts BEFORE touch(): the "changed since you last opened it" line
+    -- has to reflect the state on arrival, not after we mark it seen.
+    paint(buf, render.issue(entry.issue, entry, overlay_mod.read(uri), render_opts(uri)), uri)
     set_vars(buf, entry.issue)
   else
     vim.bo[buf].modifiable = true

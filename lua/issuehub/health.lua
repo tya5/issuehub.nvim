@@ -164,6 +164,28 @@ local function check_providers()
   end
 end
 
+local function check_backend()
+  h.start("Backend")
+
+  local backend, err = require("issuehub.backend").get()
+  if not backend then
+    h.error(tostring(err))
+    return
+  end
+
+  local ok, msg = backend:health()
+  if ok then
+    h.ok(("%s: %s"):format(backend.name, msg))
+  else
+    h.error(("%s: %s"):format(backend.name, msg))
+  end
+
+  local caps = backend:capabilities()
+  if #(caps.kinds or {}) > 0 then
+    h.info(("handles: %s (streaming=%s)"):format(table.concat(caps.kinds, ", "), tostring(caps.streaming)))
+  end
+end
+
 local function check_ui()
   h.start("UI backends")
 
@@ -197,6 +219,7 @@ function M.check()
   check_workspace()
   check_index()
   check_providers()
+  check_backend()
   check_ui()
 end
 

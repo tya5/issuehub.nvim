@@ -73,6 +73,14 @@ local subcommands = {
     require("issuehub.ui.buffer").refresh(uri)
   end,
 
+  analyze = function(args)
+    require("issuehub").analyze(args[1])
+  end,
+
+  analyses = function(args)
+    require("issuehub").analyses(args[1])
+  end,
+
   export = function(args)
     -- [format] [source]. The output path comes from `export.dir` (or the cwd)
     -- and the view's own name, so there is no third positional to get wrong.

@@ -973,10 +973,33 @@ If neither is available, `find` degrades to a Lua scan of the index.
 ```lua
 ---@class issuehub.Backend
 ---@field name string
----@field discover fun(self, cb: fun(err: string?, caps: table?))
----@field send fun(self, req: issuehub.Request, cb: fun(err: string?, res: table?))
+---@field setup fun(self, opts: table): boolean, string?
+---@field capabilities fun(self): issuehub.BackendCaps
+---@field discover fun(self, cb: fun(err: string?, caps: issuehub.BackendCaps?))
+---@field send fun(self, req: issuehub.Request, opts: table, cb: fun(err: string?, res: issuehub.Response?))
 ---@field health fun(self): boolean, string
 ```
+
+```lua
+---@class issuehub.BackendCaps
+---@field kinds string[]      Request kinds handled: "analyze", "complete", …
+---@field streaming boolean   Whether opts.on_chunk is called incrementally.
+---@field models string[]?
+```
+
+**Requests carry a kind.** An earlier draft had a single opaque `send`. That is
+replaced because the roadmap includes LLM completion, and bolting a second verb
+onto a one-verb interface later would break every third-party backend. A backend
+advertises the kinds it handles; core refuses the rest with a clear message
+rather than sending something the backend will not understand.
+
+Streaming is optional in the same way: `opts.on_chunk` is called incrementally by
+backends that can, once by backends that cannot, and callers use one code path
+either way.
+
+`backend.complete()` is exposed as a documented extension point. Nothing in
+issuehub calls it — it exists so an LLM backend can be registered and driven by
+user code or a future feature without the contract moving.
 
 Internal request model:
 
@@ -1021,13 +1044,7 @@ Implemented in 0.1:
 :IssueHub health
 ```
 
-Planned, with the milestone that adds them:
-
-```
-:IssueHub analyze [target]           -- 0.5
-```
-
-No user-facing string may reference a command from the second list.
+No user-facing string may reference a command that does not exist.
 
 The namespaced form is what makes `provider list` / `collection add` possible
 without inventing a new top-level command per noun.
@@ -1106,7 +1123,7 @@ release** with a third-party provider proving the interface.
 | **0.2** ✅ | Workspace + Overlay (memo/metadata/prompt), editable regions, `:w` writeback, bookmarks, `state.yaml` |
 | **0.3** ✅ | sync + change detection, "changed since I last looked", `:IssueHub sync` / `changed` |
 | **0.4** ✅ | Collections, Export (all four formats), ripgrep path + `--regex` for `find`, Current View |
-| **0.5** | Backend interface, `none` + A2A, Analysis history and staleness |
+| **0.5** ✅ | Backend interface with request kinds, `none` + A2A, analysis history and derived staleness |
 | **0.6** | FTS5 indexing of memo / metadata / analysis bodies (the schema columns exist in 0.1 but are populated only with title and description) |
 | **0.7** | Docs, vimdoc, third-party extension guide, API freeze candidate |
 

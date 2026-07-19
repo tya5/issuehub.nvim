@@ -130,6 +130,9 @@ function M.issue(issue, entry, overlay, opts)
       push(("- Labels:   %s"):format(table.concat(issue.labels, ", ")))
     end
     push(("- Updated:  %s  (%s)"):format(issue.updated_at, freshness(entry)))
+    if opts.analysis then
+      push(("- Analysis: %s (%s)"):format(opts.analysis.stamp, opts.analysis.status))
+    end
     if opts.changed_since_seen then
       -- Surfaced in the header rather than as a notification: it is a property
       -- of this issue, and it should still be visible an hour later.

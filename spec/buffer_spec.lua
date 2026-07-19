@@ -172,3 +172,43 @@ describe("issue buffer", function()
     assert.equals("2026-07-19T10:00:00Z", require("issuehub.core.workspace").state(URI).last_seen_updated_at)
   end)
 end)
+
+describe("issue header indicators", function()
+  before_each(fresh)
+
+  it("shows the changed marker on open, not only after a refresh", function()
+    -- Regression: M.open once skipped render_opts, so the primary path — just
+    -- opening an issue — showed neither indicator.
+    open()
+    cache.put(issue_mod.normalize({
+      provider = "jira",
+      id = "PROJ-1",
+      title = "Timeout on cache warmup",
+      status = { id = "1", name = "Open" },
+      updated_at = "2026-07-25T10:00:00Z",
+    }))
+
+    local buf = open()
+    local header = table.concat(vim.api.nvim_buf_get_lines(buf, 0, 12, false), "\n")
+    assert.truthy(header:find("Changed:", 1, true))
+  end)
+
+  it("shows the newest analysis and its staleness", function()
+    open()
+    require("issuehub.core.analysis").save(URI, { prompt = "p", response = "r", backend = "fake" })
+
+    local header = table.concat(vim.api.nvim_buf_get_lines(open(), 0, 12, false), "\n")
+    assert.truthy(header:find("Analysis:", 1, true))
+    assert.truthy(header:find("(current)", 1, true))
+
+    cache.put(issue_mod.normalize({
+      provider = "jira",
+      id = "PROJ-1",
+      title = "Timeout on cache warmup",
+      status = { id = "1", name = "Open" },
+      updated_at = "2026-07-25T10:00:00Z",
+    }))
+    local moved = table.concat(vim.api.nvim_buf_get_lines(open(), 0, 12, false), "\n")
+    assert.truthy(moved:find("(outdated)", 1, true))
+  end)
+end)
