@@ -9,12 +9,12 @@ every issue with a local, Git-managed workspace of notes, metadata, and analysis
 
 > **Status: 0.1.0 — early.**
 >
-> **Works today:** Jira (Cloud and Server/DC), caching, the local index
-> (JSON or SQLite+FTS5), the picker across all four backends, local search, and a
-> read-only issue buffer.
+> **Works today:** four providers — Jira, Redmine, GitHub, GitLab — plus
+> caching, the local index (JSON or SQLite+FTS5), the picker across all four UI
+> backends, local search, and a read-only issue buffer.
 >
-> **Not yet:** **Redmine (0.2)**, the Workspace overlay — memo / metadata /
-> prompt (0.2) — sync (0.3), collections and export (0.4), and AI backends (0.5).
+> **Not yet:** the Workspace overlay — memo / metadata / prompt (0.2) — sync
+> (0.3), collections and export (0.4), and AI backends (0.5).
 >
 > The public API may break between minor versions until 1.0.
 > See [DESIGN.md](DESIGN.md).
@@ -43,6 +43,27 @@ use and delegates:
 
 **No hard dependencies.** `dependencies = {}`. Every integration is a runtime
 `pcall`. issuehub works with zero plugins installed — just less comfortably.
+
+## Providers
+
+| Provider | Hosts | Auth | ID form |
+| -------- | ----- | ---- | ------- |
+| `jira` | Cloud and Server/DC | API token (Basic) or PAT (Bearer) | `PROJ-123` |
+| `redmine` | self-hosted | `X-Redmine-API-Key` | `12345` |
+| `github` | github.com and Enterprise Server | PAT (Bearer) | `owner/repo#123` |
+| `gitlab` | gitlab.com and self-managed | `PRIVATE-TOKEN` | `group/project#12` |
+
+GitHub and GitLab IDs are repository-qualified so one workspace can span many
+repositories. They are percent-encoded on disk
+(`github/owner%2Frepo%23123/`) — which is exactly why paths are RFC 3986 encoded.
+
+GitHub pull requests are included alongside issues; GitHub numbers both in one
+sequence per repository, so `owner/repo#123` stays unambiguous. Their status
+reads `Open`, `Draft`, `Merged`, or `Closed`.
+
+`closed` is always taken from what the API states, never guessed from a status
+label: Jira's `statusCategory`, Redmine's `/issue_statuses.json`, and the
+`state` field on GitHub and GitLab.
 
 ## Requirements
 
@@ -110,6 +131,25 @@ require("issuehub").setup({
       -- for Cloud on a vanity domain.
       -- flavor = "cloud",
     },
+
+    redmine = {
+      url = "https://redmine.example.com",
+      token_env = "REDMINE_API_KEY",
+      default_query = { assigned_to_id = "me", status_id = "open" },
+    },
+
+    github = {
+      -- url defaults to https://api.github.com
+      -- Enterprise Server: url = "https://ghe.example.com/api/v3"
+      token_env = "GITHUB_TOKEN",
+      default_query = "is:open assignee:@me",   -- GitHub search syntax
+    },
+
+    gitlab = {
+      -- url defaults to https://gitlab.com (self-managed: your instance root)
+      token_env = "GITLAB_TOKEN",
+      default_query = { scope = "assigned_to_me", state = "opened" },
+    },
   },
 
   ui = { picker = "auto" },           -- "auto"|"snacks"|"fzf"|"telescope"|"select"
@@ -140,7 +180,7 @@ log file.
 
 ```vim
 :IssueHub open [uri]     " picker over the default query, or open a URI
-:IssueHub search <jql>   " provider-side search (passed through, not translated)
+:IssueHub search <query> " provider-side search (JQL / GitHub qualifiers / ...)
 :IssueHub find <text>    " local search across the index
 :IssueHub local          " everything already cached, offline
 :IssueHub refresh        " re-fetch the current issue buffer

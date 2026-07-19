@@ -8,9 +8,34 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ## [Unreleased]
 
+### Added
+
+- **Redmine provider.** `closed` comes from `/issue_statuses.json`, fetched once
+  per session and cached, because Redmine's issue payload only carries
+  `status.is_closed` on newer versions and status names are per-instance
+  configurable. Journal entries with no note are field-change records, not
+  comments, and are skipped.
+- **GitHub provider** for github.com and Enterprise Server. Pull requests are
+  included — GitHub numbers issues and PRs in one sequence per repository, so
+  `owner/repo#123` stays unambiguous — and status distinguishes `Open`, `Draft`,
+  `Merged`, and `Closed`. Newest comments are fetched by requesting the last
+  page rather than the first.
+- **GitLab provider** for gitlab.com and self-managed. Uses the per-project `iid`
+  (what the UI shows), not the global issue id. System notes are GitLab's audit
+  trail and are dropped.
+- **Repository-qualified IDs** for GitHub and GitLab (`owner/repo#123`), so one
+  workspace can span many repositories. These are the first IDs to actually
+  exercise the RFC 3986 path encoding.
+- `provider/util.lua`, shared request and auth plumbing, extracted once there
+  were four providers repeating it.
+
+### Changed
+
+- `providers.<name>.url` is now required only for Jira and Redmine. GitHub and
+  GitLab default to their SaaS hosts.
+
 Planned next: the Workspace overlay — memo, metadata, and prompt as editable
-buffer regions with `:w` writeback — plus the Redmine provider (0.2). See §22 of
-[DESIGN.md](DESIGN.md) for the full roadmap.
+buffer regions with `:w` writeback (0.2). See §22 of [DESIGN.md](DESIGN.md).
 
 ## [0.1.0] — 2026-07-19
 

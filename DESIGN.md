@@ -130,9 +130,12 @@ issuehub.nvim/
 │       │
 │       ├── provider/
 │       │   ├── init.lua          # registry, resolve by uri scheme
+│       │   ├── util.lua          # shared request/auth plumbing
 │       │   ├── adf.lua           # Atlassian Document Format -> Markdown
 │       │   ├── jira.lua
-│       │   └── redmine.lua       # 0.2
+│       │   ├── redmine.lua
+│       │   ├── github.lua
+│       │   └── gitlab.lua
 │       │
 │       ├── backend/               # 0.5
 │       │   ├── init.lua          # registry
@@ -576,6 +579,42 @@ Rules:
 - `list()` may return partial issues (no `comments`/`description`) for speed;
   `get()` must return complete ones. The picker only needs `list()` fields.
 
+### 7.1 Shipped providers
+
+| Provider | Hosts | Auth | ID form | `closed` derived from |
+| -------- | ----- | ---- | ------- | --------------------- |
+| `jira` | Cloud, Server/DC | API token (Basic) / PAT (Bearer) | `PROJ-123` | `statusCategory.key == "done"` |
+| `redmine` | self-hosted | `X-Redmine-API-Key` header | `12345` | `/issue_statuses.json` map |
+| `github` | github.com, Enterprise Server | PAT (Bearer) | `owner/repo#123` | `state` (+ `merged_at`, `draft`) |
+| `gitlab` | gitlab.com, self-managed | `PRIVATE-TOKEN` header | `group/project#12` | `state == "closed"` |
+
+No provider guesses `closed` from a status label — each uses a field the API
+states outright. Redmine is the interesting case: its issue payload carries
+`status.is_closed` only on newer versions, so the provider fetches
+`/issue_statuses.json` **once per session** and uses it as the authority, falling
+back to the per-issue field when present. Status names are per-instance
+configurable in Redmine, so a name-based table would be exactly the guessing §4.1
+exists to prevent.
+
+**Repository-qualified IDs.** GitHub and GitLab number issues per repository, so
+the ID must carry the repository for a workspace to span more than one. The
+resulting `/` and `#` are what the RFC 3986 encoding of §4.2 was designed for:
+
+```
+github://tya5%2Fissuehub.nvim%23123   →  github/tya5%2Fissuehub.nvim%23123/
+gitlab://group%2Fsub%2Fproj%2312      →  gitlab/group%2Fsub%2Fproj%2312/
+```
+
+**GitHub pull requests are included.** GitHub numbers issues and pull requests in
+one sequence per repository, so `owner/repo#123` remains unambiguous. Status
+distinguishes them: `Open`, `Draft`, `Merged`, `Closed`.
+
+**Query passthrough in practice.** `search()` takes JQL for Jira, GitHub search
+qualifiers for GitHub, and a free-text term for GitLab and Redmine. `list()`
+additionally accepts a parameter table for Redmine and GitLab, whose list
+endpoints are filter-driven rather than query-driven. None of these are
+translated into one another — see §7's rationale.
+
 Third-party registration:
 
 ```lua
@@ -996,7 +1035,8 @@ release** with a third-party provider proving the interface.
 | Version | Contents |
 | ------- | -------- |
 | **0.1** ✅ | config + validation, health, HttpClient, Canonical Issue + minimal Status, Repository skeleton (`.state/`, `.gitignore`, URI→path, case-collision guard), cache incl. partial-result handling, **both index backends incl. FTS5**, Jira provider + ADF, View, picker abstraction + all four adapters, read-only virtual buffer, `find` / `local` / `reindex` |
-| **0.2** | Workspace + Overlay (memo/metadata/prompt), editable regions, `:w` writeback, Redmine provider |
+| **0.1.1** ✅ | Redmine, GitHub, and GitLab providers; repository-qualified IDs |
+| **0.2** | Workspace + Overlay (memo/metadata/prompt), editable regions, `:w` writeback |
 | **0.3** | sync + change detection + staleness, `state.yaml`, bookmarks |
 | **0.4** | Collections, Export (all four formats), ripgrep path + `--regex` for `find` |
 | **0.5** | Backend interface, `none` + A2A, Analysis history and staleness |

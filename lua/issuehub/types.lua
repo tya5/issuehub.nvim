@@ -62,7 +62,8 @@
 ---@field pick fun(view: issuehub.View, opts: table)
 
 ---@class issuehub.ProviderConfig
----@field url string
+---@field url string?          Required for jira/redmine; defaults for github/gitlab
+---@field web_url string?      GitHub Enterprise: browser host, if it differs from the API host
 ---@field user string?
 ---@field token_env string?
 ---@field token_cmd string[]?

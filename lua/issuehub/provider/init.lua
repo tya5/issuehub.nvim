@@ -9,14 +9,18 @@ local configured = {}
 
 local BUILTIN = {
   jira = "issuehub.provider.jira",
+  redmine = "issuehub.provider.redmine",
+  github = "issuehub.provider.github",
+  gitlab = "issuehub.provider.gitlab",
 }
 
 ---Named in the docs and the roadmap, but not shipped yet. Listed so the error
 ---says "not implemented yet" rather than "unknown provider", which would read as
 ---a typo.
 local PLANNED = {
-  redmine = "0.2",
-  github = "future",
+  azure = "future",
+  linear = "future",
+  youtrack = "future",
 }
 
 ---Register a third-party provider.

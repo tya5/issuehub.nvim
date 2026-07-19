@@ -95,10 +95,15 @@ local function validate(opts, raw)
     )
   end
 
+  -- Self-hosted-only providers have no sensible default host; the SaaS ones do.
+  local URL_REQUIRED = { jira = true, redmine = true }
+
   for name, p in pairs(opts.providers) do
     if type(p) ~= "table" then
       errors[#errors + 1] = ("providers.%s must be a table"):format(name)
-    elseif type(p.url) ~= "string" or p.url == "" then
+    elseif p.url ~= nil and (type(p.url) ~= "string" or p.url == "") then
+      errors[#errors + 1] = ("providers.%s.url must be a non-empty string"):format(name)
+    elseif p.url == nil and URL_REQUIRED[name] then
       errors[#errors + 1] = ("providers.%s.url is required"):format(name)
     end
   end
