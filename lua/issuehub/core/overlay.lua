@@ -1,4 +1,8 @@
----@brief Overlay: the local knowledge attached to an issue (§7).
+---@brief Overlay: the local knowledge attached to a subject (§7).
+---
+--- A subject is an issue URI or `collection:<slug>`; both carry the same three
+--- files, because notes and a prompt make as much sense for a sprint as for a
+--- ticket.
 ---
 --- Never written back to the provider. Files are stored as the user typed them —
 --- writeback is verbatim buffer text — so comments, key order, and formatting in
@@ -25,7 +29,7 @@ local FILES = {
 ---@param field string
 ---@return string? path
 function M.path(uri, field)
-  local dir = repository.issue_dir(uri)
+  local dir = repository.subject_dir(uri)
   if not dir or not FILES[field] then
     return nil
   end

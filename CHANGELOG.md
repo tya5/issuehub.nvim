@@ -10,6 +10,13 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ### Added
 
+- **Collections carry a prompt and an analysis history**, like issues do. Paths
+  now resolve a *subject* — an issue URI or `collection:<slug>` — so overlay,
+  analysis, and state work on both. A collection is stored as a directory
+  (`collection.yaml` plus `prompt.md` and `analyses/`) rather than a bare file;
+  the pre-v2 file is still read, and migrated away on the next write. Repository
+  layout is v2.
+
 - **Export merges the cache with the workspace.** `all`, and a provider instance
   name, now export the union of both rather than whatever the index happens to
   hold. The two sets differ — an issue annotated months ago may have fallen out

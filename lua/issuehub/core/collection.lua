@@ -24,9 +24,20 @@ function M.slug(name)
   return slug ~= "" and slug or "collection"
 end
 
+---Where a collection's definition lives now: a directory, so it can hold a
+---prompt and an analysis history beside the member list, exactly as an issue
+---does.
 ---@param slug string
 ---@return string? path
 local function path_of(slug)
+  local dir = repository.subject_dir("collection:" .. slug)
+  return dir and vim.fs.joinpath(dir, "collection.yaml") or nil
+end
+
+---The pre-v2 layout: a bare `<slug>.yaml`. Still read, never written.
+---@param slug string
+---@return string? path
+local function legacy_path_of(slug)
   local dir = repository.meta("collections")
   return dir and vim.fs.joinpath(dir, slug .. ".yaml") or nil
 end
@@ -37,10 +48,16 @@ function M.list()
   if not dir or not fs.is_dir(dir) then
     return {}
   end
-  local slugs = {}
-  for _, file in ipairs(fs.list(dir)) do
-    local slug = file:match("^(.+)%.yaml$")
-    if slug then
+  local seen, slugs = {}, {}
+  for _, entry in ipairs(fs.list(dir)) do
+    local slug
+    if fs.is_dir(vim.fs.joinpath(dir, entry)) then
+      slug = entry
+    else
+      slug = entry:match("^(.+)%.yaml$")
+    end
+    if slug and not seen[slug] then
+      seen[slug] = true
       slugs[#slugs + 1] = slug
     end
   end
@@ -54,7 +71,11 @@ function M.get(name_or_slug)
   local slug = M.slug(name_or_slug)
   local path = path_of(slug)
   if not path or not fs.exists(path) then
-    return nil
+    -- Fall back to the pre-v2 file so an existing workspace keeps working.
+    path = legacy_path_of(slug)
+    if not path or not fs.exists(path) then
+      return nil
+    end
   end
 
   local parsed = yaml.parse(fs.read(path))
@@ -86,7 +107,17 @@ function M.save(collection)
   if collection.description then
     payload.description = collection.description
   end
-  return fs.write(path, yaml.encode(payload))
+
+  local ok, err = fs.write(path, yaml.encode(payload))
+  if ok then
+    -- Migrate on write: the old file would otherwise shadow nothing but still
+    -- show up in `list()`.
+    local legacy = legacy_path_of(slug)
+    if legacy and fs.exists(legacy) then
+      vim.uv.fs_unlink(legacy)
+    end
+  end
+  return ok, err
 end
 
 ---@param name string
@@ -126,12 +157,28 @@ end
 ---@param name string
 ---@return boolean deleted
 function M.delete(name)
-  local path = path_of(M.slug(name))
-  if not path or not fs.exists(path) then
-    return false
+  local slug = M.slug(name)
+  local legacy = legacy_path_of(slug)
+  local dir = repository.subject_dir("collection:" .. slug)
+
+  local existed = false
+  if legacy and fs.exists(legacy) then
+    vim.uv.fs_unlink(legacy)
+    existed = true
   end
-  vim.uv.fs_unlink(path)
-  return true
+  if dir and fs.is_dir(dir) then
+    -- Takes the prompt and analyses with it; they belong to the collection.
+    vim.fn.delete(dir, "rf")
+    existed = true
+  end
+  return existed
+end
+
+---The subject key for a collection, for overlay and analysis.
+---@param name string
+---@return string
+function M.subject(name)
+  return "collection:" .. M.slug(name)
 end
 
 ---Build a View over a collection's members.

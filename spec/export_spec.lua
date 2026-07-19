@@ -396,3 +396,76 @@ describe("columns for analysis", function()
     end
   end)
 end)
+
+describe("collections as directories", function()
+  local repository = require("issuehub.core.repository")
+  local overlay_mod = require("issuehub.core.overlay")
+
+  before_each(fresh)
+
+  it("stores the definition in a directory that can hold more", function()
+    collection.add("Sprint A", "jira://PROJ-1")
+    local dir = repository.subject_dir("collection:sprint-a")
+    assert.truthy(fs.exists(vim.fs.joinpath(dir, "collection.yaml")))
+  end)
+
+  it("carries a prompt and notes, exactly like an issue", function()
+    collection.add("Sprint A", "jira://PROJ-1")
+    local subject = collection.subject("Sprint A")
+
+    overlay_mod.write(subject, { prompt = "plot the defect curve", memo = "sprint retro notes" })
+    assert.equals("plot the defect curve", overlay_mod.read(subject).prompt)
+    assert.equals("sprint retro notes", overlay_mod.read(subject).memo)
+  end)
+
+  it("keeps an analysis history of its own", function()
+    collection.add("Sprint A", "jira://PROJ-1")
+    local subject = collection.subject("Sprint A")
+
+    local stamp = assert(require("issuehub.core.analysis").save(subject, {
+      prompt = "plot it",
+      response = "closures rose in July",
+    }))
+    local entries = require("issuehub.core.analysis").list(subject)
+    assert.equals(1, #entries)
+    assert.equals("closures rose in July", entries[1].response)
+    assert.equals(stamp, entries[1].stamp)
+  end)
+
+  it("still reads a pre-v2 bare yaml file", function()
+    local legacy = vim.fs.joinpath(repository.meta("collections"), "old-one.yaml")
+    fs.write(legacy, "name: Old One\nissues:\n  - jira://PROJ-9\n")
+
+    local loaded = assert(collection.get("old-one"))
+    assert.equals("Old One", loaded.name)
+    assert.same({ "jira://PROJ-9" }, loaded.issues)
+    assert.truthy(vim.tbl_contains(collection.list(), "old-one"))
+  end)
+
+  it("migrates the old file away on the next write", function()
+    local legacy = vim.fs.joinpath(repository.meta("collections"), "old-two.yaml")
+    fs.write(legacy, "name: Old Two\nissues:\n  - jira://PROJ-9\n")
+
+    collection.add("old-two", "jira://PROJ-10")
+
+    assert.is_false(fs.exists(legacy))
+    assert.equals(2, #collection.get("old-two").issues)
+    -- And it appears exactly once, not twice.
+    local count = 0
+    for _, slug in ipairs(collection.list()) do
+      if slug == "old-two" then
+        count = count + 1
+      end
+    end
+    assert.equals(1, count)
+  end)
+
+  it("deletes the prompt and analyses with the collection", function()
+    collection.add("Doomed", "jira://PROJ-1")
+    overlay_mod.write(collection.subject("Doomed"), { prompt = "gone soon" })
+
+    assert.is_true(collection.delete("Doomed"))
+    assert.is_nil(collection.get("Doomed"))
+    assert.is_false(fs.is_dir(repository.subject_dir("collection:doomed")))
+  end)
+end)

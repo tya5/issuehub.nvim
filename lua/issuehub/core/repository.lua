@@ -9,7 +9,7 @@ local issue = require("issuehub.core.issue")
 
 local M = {}
 
-local LAYOUT_VERSION = "1"
+local LAYOUT_VERSION = "2"
 
 local GITIGNORE = [[
 # Derived state: cache, index, locks. Safe to delete at any time.
@@ -63,6 +63,29 @@ function M.issue_dir(uri)
     return nil, ("not a valid issue URI: %s"):format(tostring(uri))
   end
   return under(provider, issue.encode_id(id))
+end
+
+---A subject is anything that can carry notes and analyses: an issue URI, or
+---`collection:<slug>`.
+---
+--- Introduced so a collection can hold a prompt and an analysis history exactly
+--- like an issue does. Everything downstream — overlay, analysis, the
+--- conversation window — works on subjects rather than only on issues.
+---@param subject string
+---@return string? path
+---@return string? err
+function M.subject_dir(subject)
+  local slug = subject:match("^collection:(.+)$")
+  if slug then
+    return M.meta("collections", slug)
+  end
+  return M.issue_dir(subject)
+end
+
+---@param subject string
+---@return boolean
+function M.is_collection(subject)
+  return subject:match("^collection:") ~= nil
 end
 
 ---@param uri string

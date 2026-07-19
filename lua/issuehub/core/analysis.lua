@@ -34,8 +34,8 @@ end
 ---@param uri string
 ---@return string? path
 function M.dir(uri)
-  local issue_dir = repository.issue_dir(uri)
-  return issue_dir and vim.fs.joinpath(issue_dir, "analyses") or nil
+  local dir = repository.subject_dir(uri)
+  return dir and vim.fs.joinpath(dir, "analyses") or nil
 end
 
 ---@param uri string

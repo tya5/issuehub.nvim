@@ -27,7 +27,7 @@ local M = {}
 ---@param uri string
 ---@return string? path
 local function state_path(uri)
-  local dir = repository.issue_dir(uri)
+  local dir = repository.subject_dir(uri)
   return dir and vim.fs.joinpath(dir, "state.yaml") or nil
 end
 
