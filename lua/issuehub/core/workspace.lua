@@ -89,10 +89,12 @@ end
 ---@param uri string
 function M.touch(uri)
   local entry = cache.get(uri)
+  local seen = entry and entry.issue and entry.issue.updated_at or nil
   M.set_state(uri, {
     last_opened_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-    last_seen_updated_at = entry and entry.issue and entry.issue.updated_at or nil,
+    last_seen_updated_at = seen,
   })
+  require("issuehub.core.index").get():set_seen(uri, seen)
 end
 
 ---@param uri string

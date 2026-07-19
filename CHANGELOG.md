@@ -10,6 +10,28 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ### Added
 
+- **Sync and change detection (0.3).** `:IssueHub sync [target]` re-fetches
+  everything local — or one provider instance, or one issue — and reports what
+  moved per issue (`status Open → In Progress, assignee, +2 comments`).
+  `:IssueHub changed` opens a picker over issues whose remote revision moved
+  since you last opened them, and the issue header carries a `Changed:` line.
+  - **Sync never mutates the Workspace.** It refreshes the cache and the
+    `state.yaml` housekeeping, nothing else: a remote edit must not rewrite your
+    notes.
+  - Change detection compares the watched fields directly rather than hashing.
+    An earlier design used `updated_at` plus a content-hash fallback; direct
+    comparison is cheaper to reason about and strictly more informative, since
+    the report has to say *what* moved anyway.
+  - Comment counts come from the provider's reported total, because the fetched
+    list is capped and its length would understate the change.
+  - "Changed since I last looked" is derived from `state.yaml`, so it survives
+    restarts and accumulates across syncs, and clears when you open the issue
+    rather than when a sync runs. The marker is mirrored into the index, so
+    listing changed issues is a filter rather than a walk of the Repository.
+  - Sync targets everything cached plus anything with local notes, so an
+    annotated issue that fell out of the cache is still tracked.
+  - Repainting after a sync preserves unsaved buffer edits.
+
 - **Workspace overlay (0.2).** The issue buffer now has three editable regions —
   Memo, Metadata, and Prompt — written back to `memo.md`, `metadata.yaml`, and
   `prompt.md` on `:w`. Only files whose content changed are written, so `:w` on

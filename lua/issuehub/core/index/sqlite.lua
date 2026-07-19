@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS issues (
   closed INTEGER,
   assignee TEXT,
   updated_at TEXT,
-  bookmarked INTEGER DEFAULT 0
+  bookmarked INTEGER DEFAULT 0,
+  seen_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_issues_open ON issues(closed, updated_at DESC);
 ]]
@@ -159,6 +160,7 @@ function Sqlite:put(issue)
     ),
     "ON CONFLICT(uri) DO UPDATE SET",
     "  title=excluded.title, status=excluded.status, closed=excluded.closed,",
+    -- seen_at and bookmarked are user data, not payload: never overwritten here.
     "  assignee=excluded.assignee, updated_at=excluded.updated_at;",
   }, "\n")
   self:_exec(sql)
@@ -183,6 +185,13 @@ function Sqlite:set_bookmark(uri, value)
 end
 
 ---@param uri string
+---@param updated_at string?
+function Sqlite:set_seen(uri, updated_at)
+  self:_ensure()
+  self:_exec(("UPDATE issues SET seen_at = %s WHERE uri = %s;"):format(q(updated_at), q(uri)))
+end
+
+---@param uri string
 function Sqlite:delete(uri)
   self:_ensure()
   self:_exec(("DELETE FROM issues WHERE uri = %s;"):format(q(uri)))
@@ -203,6 +212,7 @@ local function to_item(row)
     assignee = row.assignee,
     updated_at = row.updated_at or "",
     bookmarked = row.bookmarked == 1,
+    seen_at = row.seen_at,
   }
 end
 
@@ -221,6 +231,10 @@ function Sqlite:list(filter)
   end
   if filter.bookmarked ~= nil then
     where[#where + 1] = ("bookmarked = %s"):format(q(filter.bookmarked))
+  end
+  if filter.changed ~= nil then
+    where[#where + 1] = filter.changed and "(seen_at IS NOT NULL AND seen_at <> updated_at)"
+      or "(seen_at IS NULL OR seen_at = updated_at)"
   end
   local clause = #where > 0 and ("WHERE " .. table.concat(where, " AND ")) or ""
 
@@ -270,8 +284,12 @@ function Sqlite:rebuild()
       self:put(entry.issue)
       -- Bookmarks are user data in state.yaml, so a rebuilt index must recover
       -- them rather than silently dropping them.
-      if require("issuehub.core.workspace").state(uri).bookmarked then
+      local state = require("issuehub.core.workspace").state(uri)
+      if state.bookmarked then
         self:set_bookmark(uri, true)
+      end
+      if state.last_seen_updated_at then
+        self:set_seen(uri, state.last_seen_updated_at)
       end
       count = count + 1
     end

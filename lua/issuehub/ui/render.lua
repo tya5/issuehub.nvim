@@ -99,8 +99,10 @@ end
 ---@param issue issuehub.Issue
 ---@param entry issuehub.CacheEntry?
 ---@param overlay issuehub.Overlay?
+---@param opts { changed_since_seen: boolean?, seen_at: string? }?
 ---@return issuehub.RenderResult
-function M.issue(issue, entry, overlay)
+function M.issue(issue, entry, overlay, opts)
+  opts = opts or {}
   local lines = {}
   local sections = {}
 
@@ -128,6 +130,11 @@ function M.issue(issue, entry, overlay)
       push(("- Labels:   %s"):format(table.concat(issue.labels, ", ")))
     end
     push(("- Updated:  %s  (%s)"):format(issue.updated_at, freshness(entry)))
+    if opts.changed_since_seen then
+      -- Surfaced in the header rather than as a notification: it is a property
+      -- of this issue, and it should still be visible an hour later.
+      push(("- Changed:  since you last opened it (%s)"):format(opts.seen_at or "unknown revision"))
+    end
     if issue.url then
       push(("- URL:      %s"):format(issue.url))
     end

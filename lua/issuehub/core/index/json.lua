@@ -45,7 +45,11 @@ end
 ---@param issue issuehub.Issue
 function Json:put(issue)
   local items = self:_load()
-  items[issue.uri] = issue_mod.to_item(issue, items[issue.uri] and items[issue.uri].bookmarked)
+  local previous = items[issue.uri]
+  local item = issue_mod.to_item(issue, previous and previous.bookmarked)
+  -- seen_at belongs to the user, not the payload: carry it across a refresh.
+  item.seen_at = previous and previous.seen_at or nil
+  items[issue.uri] = item
   self:_flush()
 end
 
@@ -57,6 +61,18 @@ function Json:set_bookmark(uri, value)
   local items = self:_load()
   if items[uri] then
     items[uri].bookmarked = value
+    self:_flush()
+  end
+end
+
+---Mirror the revision the user last viewed, so "changed since I last looked"
+---is a field comparison rather than N reads of state.yaml.
+---@param uri string
+---@param updated_at string?
+function Json:set_seen(uri, updated_at)
+  local items = self:_load()
+  if items[uri] then
+    items[uri].seen_at = updated_at
     self:_flush()
   end
 end
@@ -80,6 +96,12 @@ function Json:list(filter)
     end
     if keep and filter.bookmarked ~= nil and (item.bookmarked == true) ~= filter.bookmarked then
       keep = false
+    end
+    if keep and filter.changed ~= nil then
+      local changed = item.seen_at ~= nil and item.seen_at ~= item.updated_at
+      if changed ~= filter.changed then
+        keep = false
+      end
     end
     if keep and filter.provider then
       local provider = issue_mod.parse(item.uri)
@@ -118,7 +140,10 @@ function Json:rebuild()
     if entry and entry.issue then
       -- Bookmarks are user data in state.yaml, so a rebuilt index must recover
       -- them rather than silently dropping them.
-      self.items[uri] = issue_mod.to_item(entry.issue, require("issuehub.core.workspace").state(uri).bookmarked)
+      local state = require("issuehub.core.workspace").state(uri)
+      local item = issue_mod.to_item(entry.issue, state.bookmarked)
+      item.seen_at = state.last_seen_updated_at
+      self.items[uri] = item
       count = count + 1
     end
   end

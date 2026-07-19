@@ -128,6 +128,78 @@ function M.bookmarks()
   require("issuehub.ui.picker").pick(view, { title = ("bookmarks (%d)"):format(#items) })
 end
 
+---Sync issues against their providers and report what moved.
+---
+---@param target string?  A URI, a provider name, or nil for everything local.
+function M.sync(target)
+  local sync = require("issuehub.core.sync")
+  local uris
+
+  if target and require("issuehub.core.issue").is_uri(target) then
+    uris = { target }
+  else
+    uris = sync.targets()
+    if target then
+      uris = vim.tbl_filter(function(uri)
+        return require("issuehub.core.issue").parse(uri) == target
+      end, uris)
+      if #uris == 0 then
+        return vim.notify(("issuehub: nothing cached for provider '%s'"):format(target), vim.log.levels.WARN)
+      end
+    end
+  end
+
+  if #uris == 0 then
+    return vim.notify("issuehub: nothing to sync yet — open some issues first", vim.log.levels.INFO)
+  end
+
+  vim.notify(("issuehub: syncing %d issue(s)…"):format(#uris))
+
+  sync.many(uris, nil, function(result)
+    local lines = {}
+    for _, change in ipairs(result.changes) do
+      lines[#lines + 1] = "  " .. sync.describe(change)
+    end
+
+    local failures = vim.tbl_count(result.errors)
+    local summary = ("issuehub: %d changed, %d unchanged"):format(
+      #result.changes,
+      result.total - #result.changes - failures
+    )
+    if failures > 0 then
+      summary = summary .. (", %d failed"):format(failures)
+    end
+
+    if #lines > 0 then
+      vim.notify(summary .. "\n" .. table.concat(lines, "\n"))
+    else
+      vim.notify(summary)
+    end
+
+    -- Repaint anything open so the buffer matches what was just fetched.
+    local buffer = require("issuehub.ui.buffer")
+    for _, change in ipairs(result.changes) do
+      buffer.repaint(change.uri)
+    end
+
+    if failures > 0 then
+      for uri, err in pairs(result.errors) do
+        vim.notify(("issuehub: %s — %s"):format(uri, err), vim.log.levels.WARN)
+      end
+    end
+  end)
+end
+
+---Issues whose remote revision moved since you last opened them.
+function M.changed()
+  local items = require("issuehub.core.sync").changed_since_seen()
+  if #items == 0 then
+    return vim.notify("issuehub: nothing changed since you last looked", vim.log.levels.INFO)
+  end
+  local view = require("issuehub.ui.view").new({ source = "changed", label = "changed", items = items })
+  require("issuehub.ui.picker").pick(view, { title = ("changed (%d)"):format(#items) })
+end
+
 ---@return integer count
 function M.reindex()
   local count = require("issuehub.core.index").get():rebuild()

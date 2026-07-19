@@ -64,6 +64,14 @@ local subcommands = {
     require("issuehub.ui.buffer").refresh(uri)
   end,
 
+  sync = function(args)
+    require("issuehub").sync(args[1])
+  end,
+
+  changed = function()
+    require("issuehub").changed()
+  end,
+
   bookmark = function()
     local buffer = require("issuehub.ui.buffer")
     local uri = buffer.current_uri()

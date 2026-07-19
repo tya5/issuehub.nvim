@@ -11,11 +11,10 @@ every issue with a local, Git-managed workspace of notes, metadata, and analysis
 >
 > **Works today:** four providers — Jira, Redmine, GitHub, GitLab — caching, the
 > local index (JSON or SQLite+FTS5), the picker across all four UI backends,
-> local search, bookmarks, and an issue buffer with editable memo / metadata /
-> prompt written back to your Git-managed workspace.
+> local search, bookmarks, sync with change detection, and an issue buffer with
+> editable memo / metadata / prompt written back to your Git-managed workspace.
 >
-> **Not yet:** sync and change detection (0.3), collections and export (0.4),
-> and AI backends (0.5).
+> **Not yet:** collections and export (0.4), and AI backends (0.5).
 >
 > The public API may break between minor versions until 1.0.
 > See [DESIGN.md](DESIGN.md).
@@ -315,6 +314,8 @@ log file.
 :IssueHub search <query> " provider-side search (JQL / GitHub qualifiers / ...)
 :IssueHub find <text>    " local search across the index
 :IssueHub local          " everything already cached, offline
+:IssueHub sync [target]  " re-fetch and report what changed
+:IssueHub changed        " issues that moved since you last opened them
 :IssueHub refresh        " re-fetch the current issue buffer
 :IssueHub bookmark       " toggle a bookmark on the current issue
 :IssueHub bookmarks      " picker over bookmarked issues
@@ -385,6 +386,39 @@ Anything you typed in the editable sections is kept.
 **metadata.yaml is written back verbatim.** Comments, key order, and spacing
 survive exactly as you typed them — issuehub parses that file for search and
 export, but never reformats it.
+
+### Staying current
+
+```vim
+:IssueHub sync            " re-fetch everything you have locally
+:IssueHub sync jira       " just one provider instance
+:IssueHub sync <uri>      " just one issue
+:IssueHub changed         " picker over what moved since you last looked
+```
+
+Sync reports what actually moved, per issue:
+
+```
+issuehub: 3 changed, 27 unchanged
+  PROJ-123: status Open → In Progress, assignee, +2 comments
+  PROJ-140: description
+  12345: status New → Closed
+```
+
+**Sync never touches your notes.** It refreshes the cache and nothing else — a
+remote edit cannot rewrite what you wrote.
+
+Two different questions are answered separately:
+
+- *What just moved?* — the report above, from comparing the fetched issue against
+  the cached one.
+- *What moved since I last looked?* — `:IssueHub changed`, and a `Changed:` line
+  in the issue header. This is derived from `state.yaml`, so it survives
+  restarts, accumulates across syncs, and clears when you actually open the
+  issue — not when a sync happens to run.
+
+Sync targets everything cached **plus anything with local notes**, so an issue
+you annotated months ago is still tracked even if it fell out of the cache.
 
 ### Bookmarks
 

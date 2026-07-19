@@ -118,6 +118,16 @@ local function enforce_readonly(buf)
   state.last_good = current
 end
 
+---@param uri string
+---@return table
+local function render_opts(uri)
+  local state = workspace.state(uri)
+  return {
+    changed_since_seen = workspace.changed_since_seen(uri),
+    seen_at = state.last_seen_updated_at,
+  }
+end
+
 ---@param buf integer
 ---@param result issuehub.RenderResult
 ---@param uri string
@@ -243,7 +253,7 @@ function M.preview(uri, buf)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "(not cached — open it once to fetch)" })
     return
   end
-  local result = render.issue(entry.issue, entry, overlay_mod.read(uri))
+  local result = render.issue(entry.issue, entry, overlay_mod.read(uri), render_opts(uri))
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, result.lines)
   vim.bo[buf].filetype = "markdown"
 end
@@ -318,13 +328,32 @@ function M.refresh(uri, opts)
       -- Unsaved edits must survive a background refresh: re-render with what is
       -- currently in the buffer, not with what is on disk.
       local pending = vim.bo[buf].modified and render.extract(lines_of(buf)) or nil
-      paint(buf, render.issue(issue, cache.get(uri), pending or overlay_mod.read(uri)), uri)
+      paint(buf, render.issue(issue, cache.get(uri), pending or overlay_mod.read(uri), render_opts(uri)), uri)
       set_vars(buf, issue)
       if pending then
         vim.bo[buf].modified = true
       end
     end
   end)
+end
+
+---Re-render a URI from cache, if a buffer is showing it. Used after a sync.
+---@param uri string
+function M.repaint(uri)
+  local buf = find_buf(uri)
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then
+    return
+  end
+  local entry = cache.get(uri)
+  if not entry then
+    return
+  end
+  -- Unsaved edits win over what is on disk.
+  local pending = vim.bo[buf].modified and render.extract(lines_of(buf)) or nil
+  paint(buf, render.issue(entry.issue, entry, pending or overlay_mod.read(uri), render_opts(uri)), uri)
+  if pending then
+    vim.bo[buf].modified = true
+  end
 end
 
 ---@return string? uri

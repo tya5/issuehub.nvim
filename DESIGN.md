@@ -851,8 +851,20 @@ housekeeping.
 
 Detected changes: `description`, `status`, `assignee`, new comments.
 
-Change detection uses `updated_at` first (cheap) and falls back to a content hash
-of the normalized issue when providers report imprecise timestamps.
+Change detection compares the watched fields directly (status, assignee, title,
+description, labels, comment count). An earlier draft specified `updated_at` with
+a content-hash fallback; direct comparison replaced it because it is both cheaper
+to reason about and strictly more informative — the report has to say *what*
+moved, so the comparison has to happen regardless, and a hash would be a second
+mechanism answering a weaker question.
+
+`updated_at` is still used, but for a different question: `state.yaml` records
+the revision the user last opened, so "changed since I last looked" survives
+restarts and accumulates across syncs. That marker is mirrored into the index, so
+listing changed issues is a filter rather than a walk of the Repository.
+
+Comment counts come from the provider's reported total where available, since the
+fetched list is capped (§23.3) and its length would understate the change.
 
 `sync.on_open = "stale"` refreshes on open only when the cache is older than
 `stale_after`, and does so **asynchronously after rendering** — the buffer always
@@ -999,7 +1011,11 @@ Implemented in 0.1:
 :IssueHub search <query>      -- provider-side
 :IssueHub find <pattern>      -- local index
 :IssueHub local               -- everything cached, offline
+:IssueHub sync [target]       -- re-fetch and report what moved
+:IssueHub changed             -- moved since you last looked
 :IssueHub refresh             -- re-fetch the current issue buffer
+:IssueHub bookmark            -- toggle on the current issue
+:IssueHub bookmarks           -- picker over bookmarked issues
 :IssueHub reindex             -- rebuild the index from cache
 :IssueHub provider list|health
 :IssueHub health
@@ -1008,7 +1024,6 @@ Implemented in 0.1:
 Planned, with the milestone that adds them:
 
 ```
-:IssueHub sync [target]              -- 0.3
 :IssueHub export <format> [target]   -- 0.4
 :IssueHub collection [name]          -- 0.4
 :IssueHub analyze [target]           -- 0.5
@@ -1091,7 +1106,7 @@ release** with a third-party provider proving the interface.
 | **0.1** ✅ | config + validation, health, HttpClient, Canonical Issue + minimal Status, Repository skeleton (`.state/`, `.gitignore`, URI→path, case-collision guard), cache incl. partial-result handling, **both index backends incl. FTS5**, Jira provider + ADF, View, picker abstraction + all four adapters, read-only virtual buffer, `find` / `local` / `reindex` |
 | **0.1.1** ✅ | Redmine, GitHub, and GitLab providers; repository-qualified IDs |
 | **0.2** ✅ | Workspace + Overlay (memo/metadata/prompt), editable regions, `:w` writeback, bookmarks, `state.yaml` |
-| **0.3** | sync + change detection + staleness, "changed since I last looked" |
+| **0.3** ✅ | sync + change detection, "changed since I last looked", `:IssueHub sync` / `changed` |
 | **0.4** | Collections, Export (all four formats), ripgrep path + `--regex` for `find` |
 | **0.5** | Backend interface, `none` + A2A, Analysis history and staleness |
 | **0.6** | FTS5 indexing of memo / metadata / analysis bodies (the schema columns exist in 0.1 but are populated only with title and description) |

@@ -36,6 +36,7 @@
 ---@field assignee string?
 ---@field updated_at string
 ---@field bookmarked boolean
+---@field seen_at string?    The issue's updated_at when the user last opened it.
 
 ---@class issuehub.View
 ---@field source string      "query"|"collection"|"find"|"bookmarks"
