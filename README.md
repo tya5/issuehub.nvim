@@ -481,19 +481,38 @@ Your memo and metadata ride along on each row as hidden match text, so typing
 `認証` finds an issue whose *notes* mention it even though nothing on screen
 does. Nothing is fetched, and no prompt appears.
 
-Metadata is also folded in as `key:value` tokens, so you can filter structurally
-right in the picker:
+Metadata **and the issue's own fields** are folded in as `key:value` tokens, so
+you can filter structurally right in the picker — and `status:` behaves exactly
+like `priority:`, because when you are filtering you have no reason to care
+which of them came from the tracker and which you typed:
 
 ```
-priority:high            narrows to issues you marked high
-tags:cache               matches a value inside a YAML list
-priority:high tags:cache both (most pickers treat a space as AND)
+status:open              from the tracker
+state:closed             normalised open/closed, whatever the tracker calls it
+provider:github          which instance it came from
+assignee:tya5
+bookmarked:true
+priority:high            from your metadata.yaml
+tags:cache               a value inside a YAML list
+status:open priority:high   both (most pickers treat a space as AND)
+```
+
+The same names work in the exact form:
+
+```vim
+:IssueHub find --meta state=open --meta priority=high
+:IssueHub find --meta status=in-progress
+:IssueHub find --meta labels=cache
 ```
 
 > Picker filtering is substring matching, so `priority:high` also matches
-> `priority:highest`. Use `:IssueHub find --meta priority=high` when you need an
-> exact comparison — that one parses the YAML rather than the text, and reaches
-> analysis history and regexes a picker filter cannot.
+> `priority:highest`. Use `--meta` when you need an exact comparison — it parses
+> the YAML rather than the text, and reaches analysis history and regexes a
+> picker filter cannot.
+>
+> If you write a key that collides with a built-in one — say `status: waiting`
+> in your metadata — **yours wins**. The workspace is yours, and a status you set
+> deliberately should not be shadowed by the tracker's.
 
 ### Searching your notes
 

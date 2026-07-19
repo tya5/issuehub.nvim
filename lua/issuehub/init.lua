@@ -192,7 +192,7 @@ function M.find(input, opts)
 
   if #query.meta > 0 then
     items = vim.tbl_filter(function(item)
-      return query_mod.matches_meta(item.uri, query.meta)
+      return query_mod.matches_meta(item.uri, query.meta, item)
     end, items)
   end
 

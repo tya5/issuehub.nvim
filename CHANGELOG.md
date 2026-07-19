@@ -17,7 +17,13 @@ This project is pre-1.0: the public API may break between minor versions until
   your notes still narrows the list without showing the note. Metadata is also
   folded in as normalized `key:value` tokens, so `priority:high` and
   `tags:cache` filter structurally in the picker — substring matching, so
-  `--meta` remains the exact form. `:IssueHub find
+  `--meta` remains the exact form.
+- **Built-in fields filter the same way as metadata**: `status:`, `state:`,
+  `provider:`, `assignee:`, `bookmarked:` and `labels:` work both as picker
+  tokens and as `--meta` keys. When filtering, it does not matter which side a
+  field came from. Metadata you wrote wins over a built-in of the same name.
+  Filter values normalise spaces and underscores to hyphens, so
+  `--meta status=in-progress` and `--meta "status=In Progress"` both match. `:IssueHub find
   {query}` remains the precise form and still reaches analysis history and
   regexes a picker filter cannot.
 - `issuehub.browse()` is the new no-argument entry point; `find("")` routes to

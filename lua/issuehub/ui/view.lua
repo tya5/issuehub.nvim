@@ -27,16 +27,41 @@ function M.last()
   return last
 end
 
----Fold each issue's notes into its item as hidden match text.
+---Built-in fields, spelled the same way metadata is.
+---
+--- `status:open` should behave like `priority:high` — a user filtering in the
+--- picker has no reason to care which of the two came from the tracker and
+--- which they typed themselves.
+---@param item issuehub.ViewItem
+---@return string
+local function builtin_tokens(item)
+  local provider = require("issuehub.core.issue").parse(item.uri)
+  local tokens = {
+    ("status:%s"):format(tostring(item.status or ""):lower():gsub("%s+", "-")),
+    ("state:%s"):format(item.closed and "closed" or "open"),
+    ("provider:%s"):format(tostring(provider or ""):lower()),
+  }
+  if item.assignee and item.assignee ~= "" then
+    tokens[#tokens + 1] = ("assignee:%s"):format(tostring(item.assignee):lower():gsub("%s+", "-"))
+  end
+  if item.bookmarked then
+    tokens[#tokens + 1] = "bookmarked:true"
+  end
+  return table.concat(tokens, " ")
+end
+
+---Fold each issue's notes and built-in fields into its item as hidden match
+---text.
 ---
 --- Pickers match on a text field and display something else, so this is what
---- lets typing in the picker reach memo and metadata without showing them.
+--- lets typing in the picker reach memo, metadata, and status alike.
 ---@param items issuehub.ViewItem[]
 ---@return issuehub.ViewItem[]
 function M.with_notes(items)
   local overlay = require("issuehub.core.overlay")
   for _, item in ipairs(items) do
-    item.notes = overlay.searchable(item.uri)
+    local notes = overlay.searchable(item.uri)
+    item.notes = (builtin_tokens(item) .. (notes ~= "" and (" " .. notes) or ""))
   end
   return items
 end

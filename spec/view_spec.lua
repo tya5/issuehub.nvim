@@ -84,8 +84,14 @@ describe("hidden note text on picker items", function()
 
     -- This is what makes typing in the picker reach your notes.
     assert.truthy(items[1].notes:find("認証", 1, true))
-    assert.truthy(items[1].notes:find("priority: high", 1, true))
-    assert.equals("", items[2].notes)
+    assert.truthy(items[1].notes:find("priority:high", 1, true))
+
+    -- Built-in fields are spelled the same way, so `status:open` filters like
+    -- `priority:high` does. An issue with no notes still gets them.
+    assert.truthy(items[1].notes:find("status:open", 1, true))
+    assert.truthy(items[2].notes:find("status:open", 1, true))
+    assert.truthy(items[2].notes:find("provider:jira", 1, true))
+    assert.is_nil(items[2].notes:find("priority", 1, true))
 
     -- The displayed line is unchanged; notes are matched, not shown.
     local format = require("issuehub.ui.picker.format")

@@ -106,8 +106,6 @@ describe("query.matches_meta", function()
 end)
 
 describe("metadata tokens for picker filtering", function()
-  local overlay = require("issuehub.core.overlay")
-
   before_each(function()
     config.setup({ workspace = vim.fn.tempname(), index = "json" })
     require("issuehub.core.index").reset()
@@ -141,5 +139,64 @@ describe("metadata tokens for picker filtering", function()
 
   it("is empty for an issue with no overlay", function()
     assert.equals("", overlay.searchable("jira://NOTHING"))
+  end)
+end)
+
+describe("built-in fields as filters", function()
+  local URI = "jira://P-1"
+
+  before_each(function()
+    config.setup({ workspace = vim.fn.tempname(), index = "json" })
+    require("issuehub.core.index").reset()
+    require("issuehub.core.repository").ensure()
+    require("issuehub.core.cache").put(require("issuehub.core.issue").normalize({
+      provider = "jira",
+      id = "P-1",
+      title = "Timeout",
+      status = { id = "1", name = "In Progress" },
+      assignee = "tya5",
+      labels = { "cache", "perf" },
+      updated_at = "2026-07-19T10:00:00Z",
+    }))
+  end)
+
+  local function meta(input)
+    return query.parse(input).meta
+  end
+
+  it("filters on status, state, assignee, and provider", function()
+    -- Both spellings: hyphenated survives being typed without quotes, quoted
+    -- is the tracker's own wording.
+    assert.is_true(query.matches_meta(URI, meta("--meta status=in-progress")))
+    assert.is_true(query.matches_meta(URI, meta('--meta "status=In Progress"')))
+    assert.is_true(query.matches_meta(URI, meta("--meta state=open")))
+    assert.is_false(query.matches_meta(URI, meta("--meta state=closed")))
+    assert.is_true(query.matches_meta(URI, meta("--meta assignee=tya5")))
+    assert.is_true(query.matches_meta(URI, meta("--meta provider=jira")))
+  end)
+
+  it("matches a label like a list value", function()
+    assert.is_true(query.matches_meta(URI, meta("--meta labels=cache")))
+    assert.is_false(query.matches_meta(URI, meta("--meta labels=nope")))
+  end)
+
+  it("tracks bookmarks", function()
+    assert.is_false(query.matches_meta(URI, meta("--meta bookmarked=true")))
+    require("issuehub.core.workspace").toggle_bookmark(URI)
+    assert.is_true(query.matches_meta(URI, meta("--meta bookmarked=true")))
+  end)
+
+  it("lets metadata you wrote win over the tracker's field", function()
+    -- The workspace is yours; a status you set deliberately should not be
+    -- shadowed by the provider's.
+    require("issuehub.core.overlay").write(URI, { metadata = "status: waiting-on-me" })
+    assert.is_true(query.matches_meta(URI, meta("--meta status=waiting-on-me")))
+    assert.is_false(query.matches_meta(URI, meta("--meta status=in-progress")))
+  end)
+
+  it("combines a built-in field with one you wrote", function()
+    require("issuehub.core.overlay").write(URI, { metadata = "priority: high" })
+    assert.is_true(query.matches_meta(URI, meta("--meta state=open --meta priority=high")))
+    assert.is_false(query.matches_meta(URI, meta("--meta state=closed --meta priority=high")))
   end)
 end)
