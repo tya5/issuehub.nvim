@@ -1,0 +1,36 @@
+local config = require("issuehub.config")
+
+describe("config validation", function()
+  it("rejects a missing workspace at setup time, not on first use", function()
+    local errors = config.setup({})
+    assert.truthy(vim.iter(errors):any(function(e)
+      return e:find("workspace is required")
+    end))
+  end)
+
+  it("accepts a valid config", function()
+    assert.equals(0, #config.setup({ workspace = vim.fn.tempname() }))
+  end)
+
+  it("rejects keys that are accepted-but-ignored", function()
+    -- Silently swallowing setup({ backend = "a2a" }) is worse than erroring.
+    local errors = config.setup({ workspace = vim.fn.tempname(), backend = "a2a" })
+    assert.truthy(vim.iter(errors):any(function(e)
+      return e:find("`backend` is not implemented yet")
+    end))
+  end)
+
+  it("validates enums", function()
+    local errors = config.setup({ workspace = vim.fn.tempname(), index = "postgres" })
+    assert.truthy(vim.iter(errors):any(function(e)
+      return e:find("index must be one of")
+    end))
+  end)
+
+  it("requires a url per provider", function()
+    local errors = config.setup({ workspace = vim.fn.tempname(), providers = { jira = {} } })
+    assert.truthy(vim.iter(errors):any(function(e)
+      return e:find("providers.jira.url is required")
+    end))
+  end)
+end)

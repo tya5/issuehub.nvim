@@ -1,0 +1,81 @@
+---@brief View — the single list model (§0.1, §9.3).
+---
+--- A View is what the picker renders AND what export, analysis, and collections
+--- consume. Because every list-shaped operation takes a View rather than a
+--- picker, adding a picker backend adds zero code paths to export.
+
+local M = {}
+
+---@class issuehub.ViewImpl : issuehub.View
+local View = {}
+View.__index = View
+
+---@param opts { source: string, label: string, items: issuehub.ViewItem[] }
+---@return issuehub.View
+function M.new(opts)
+  return setmetatable({
+    source = opts.source or "query",
+    label = opts.label or "issues",
+    items = opts.items or {},
+    _selected = nil,
+  }, View)
+end
+
+---@param issues issuehub.Issue[]
+---@param opts { source: string?, label: string? }?
+---@return issuehub.View
+function M.from_issues(issues, opts)
+  opts = opts or {}
+  local issue_mod = require("issuehub.core.issue")
+  local items = {}
+  for _, issue in ipairs(issues) do
+    items[#items + 1] = issue_mod.to_item(issue)
+  end
+  return M.new({
+    source = opts.source or "query",
+    label = opts.label or "issues",
+    items = require("issuehub.core.index").sort(items),
+  })
+end
+
+---@return issuehub.ViewItem[]
+function View:get_items()
+  return self.items
+end
+
+---Selection, or every item when nothing is selected.
+---
+--- The fallback is what lets Level 2 pickers degrade gracefully: a backend
+--- without multi_select simply never records a selection, and bulk operations
+--- act on the whole view instead of erroring (§9.2).
+---@return issuehub.ViewItem[]
+function View:get_selected()
+  if self._selected and #self._selected > 0 then
+    return self._selected
+  end
+  return self.items
+end
+
+---@param items issuehub.ViewItem[]
+function View:set_selected(items)
+  self._selected = items
+end
+
+---@return integer
+function View:count()
+  return #self.items
+end
+
+---@return boolean
+function View:is_empty()
+  return #self.items == 0
+end
+
+---Filesystem-safe stem for export filenames.
+---@return string
+function View:slug()
+  local slug = self.label:lower():gsub("[^%w]+", "-"):gsub("^%-+", ""):gsub("%-+$", "")
+  return slug ~= "" and slug or "issues"
+end
+
+return M

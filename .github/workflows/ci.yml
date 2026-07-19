@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 0.11 is the supported floor (§20); nightly catches breakage early.
+        neovim_version: ["v0.11.0", "stable", "nightly"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install sqlite3
+        run: sudo apt-get update && sudo apt-get install -y sqlite3 ripgrep
+
+      - name: Run tests (busted + nlua)
+        uses: lumen-oss/nvim-busted-action@v1
+        with:
+          nvim_version: ${{ matrix.neovim_version }}
+
+  # Guards the local harness itself, so `nvim -l spec/runner.lua` cannot rot.
+  test-harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: stable
+      - run: sudo apt-get update && sudo apt-get install -y sqlite3
+      - run: nvim -l spec/runner.lua
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: stylua
+        uses: JohnnyMorganz/stylua-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: latest
+          args: --check lua plugin ftplugin spec
+
+      - name: luacheck
+        uses: lunarmodules/luacheck@v1
+        with:
+          args: lua plugin ftplugin --no-color

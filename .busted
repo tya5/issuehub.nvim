@@ -1,0 +1,10 @@
+return {
+  _all = {
+    -- nlua runs the specs inside Neovim, so vim.* is available without plenary.
+    lua = "nlua",
+  },
+  default = {
+    verbose = true,
+    ROOT = { "spec" },
+  },
+}
