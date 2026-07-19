@@ -15,7 +15,8 @@ every issue with a local, Git-managed workspace of notes, metadata, and analysis
 > optional AI backends with saved analysis history, and an issue buffer with
 > editable memo / metadata / prompt written back to your Git-managed workspace.
 >
-> **Not yet:** vimdoc and the API freeze (0.7).
+> **Not yet:** 1.0. The public API is documented and stable in intent, but is
+> not frozen until a third-party provider has proven the interface.
 >
 > The public API may break between minor versions until 1.0.
 > See [DESIGN.md](DESIGN.md).
@@ -610,15 +611,37 @@ Issue IDs are RFC 3986 percent-encoded for path safety, so `PROJ-123` stays
 exactly that and only the rare `PROJ/123` becomes `PROJ%2F123` — the tree stays
 readable in oil.nvim, `git diff`, and `grep`.
 
+## Documentation
+
+```vim
+:help issuehub
+```
+
+The help file is the reference: every option, command, and public API function,
+plus the extension guide. This README is the tour.
+
 ## Extending
 
+issuehub is meant to be extended from outside. Four registries are public:
+
 ```lua
-require("issuehub.provider").register("github", my_provider)
+require("issuehub.provider").register("mytracker", provider)   -- a tracker
+require("issuehub.backend").register("my-llm", backend)        -- an agent/model
+require("issuehub.core.export").register("xlsx", exporter)     -- a format
+-- picker adapters: implement pick(view, opts) + three capability flags
 ```
 
 A provider converts a remote payload to the canonical Issue and nothing else: no
-UI, no workspace access, all I/O async, errors returned rather than thrown. See
-§7 and §16 of [DESIGN.md](DESIGN.md).
+UI, no workspace access, all I/O async, errors returned rather than thrown.
+Backend requests carry a `kind`, so an LLM client slots in without the interface
+moving. See `:help issuehub-extending` and §7 / §16 of
+[DESIGN.md](DESIGN.md).
+
+### What is public
+
+`:help issuehub-api` lists the public surface. Anything not listed there is
+internal and may change without notice — that boundary is what will be frozen
+at 1.0.
 
 ## Security
 

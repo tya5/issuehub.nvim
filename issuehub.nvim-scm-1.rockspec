@@ -11,7 +11,7 @@ description = {
   detailed = [[
     issuehub.nvim unifies issue trackers behind one Neovim UI and pairs each
     issue with a local, Git-managed workspace of notes, metadata, and analysis.
-    Jira is supported today; Redmine lands in 0.2.
+    Jira, Redmine, GitHub, and GitLab are supported.
     It has no hard dependencies: pickers, git, diff, and markdown rendering are
     all delegated to whatever the user already has installed.
   ]],
@@ -30,6 +30,5 @@ test_dependencies = {
 
 build = {
   type = "builtin",
-  -- `doc/` is added once panvimdoc generation lands (0.7).
-  copy_directories = { "plugin", "ftplugin" },
+  copy_directories = { "doc", "plugin", "ftplugin" },
 }

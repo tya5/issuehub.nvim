@@ -10,6 +10,19 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ### Added
 
+- **Documentation and the public API surface (0.7).**
+  - `doc/issuehub.txt`: a hand-written vimdoc reference covering every option,
+    command, and public function, plus the extension guide. panvimdoc was
+    dropped — it renders the README, and the README is a guide while a help file
+    needs to be a reference; generating one from the other would produce a worse
+    version of both. A spec asserts that every `|tag|` resolves and that no line
+    exceeds 78 display columns.
+  - `:help issuehub-api` documents the **public surface explicitly**. Anything
+    not listed is internal and may change without notice. That boundary is what
+    gets frozen at 1.0.
+  - Release workflow: `luarocks-tag-release` plus a GitHub release on `v*` tags.
+    The rockspec now ships `doc/`.
+
 - **Full-text search over your notes (0.6).** The FTS5 schema has carried memo,
   metadata, and analyses columns since 0.1, but only title and description were
   ever written into them. They are now populated, so `:IssueHub find` searches

@@ -1,0 +1,550 @@
+*issuehub.txt*  An Issue Workspace for Neovim               *issuehub*
+
+Author:   tya5
+License:  MIT
+Homepage: https://github.com/tya5/issuehub.nvim
+
+==============================================================================
+CONTENTS                                                *issuehub-contents*
+
+  1. Introduction ............................. |issuehub-introduction|
+  2. Requirements ............................. |issuehub-requirements|
+  3. Setup .................................... |issuehub-setup|
+  4. Configuration ............................ |issuehub-config|
+  5. Commands ................................. |issuehub-commands|
+  6. Mappings ................................. |issuehub-mappings|
+  7. The issue buffer ......................... |issuehub-buffer|
+  8. Workspace layout ......................... |issuehub-workspace|
+  9. Providers ................................ |issuehub-providers|
+ 10. Search ................................... |issuehub-search|
+ 11. Collections and export ................... |issuehub-collections|
+ 12. Backends and analysis .................... |issuehub-backends|
+ 13. Corporate networks ....................... |issuehub-network|
+ 14. Lua API .................................. |issuehub-api|
+ 15. Extending ................................ |issuehub-extending|
+ 16. Health ................................... |issuehub-health|
+ 17. Design notes ............................. |issuehub-design|
+
+==============================================================================
+1. INTRODUCTION                                     *issuehub-introduction*
+
+issuehub.nvim browses issue trackers through one Neovim UI and pairs every
+issue with a local, Git-managed workspace of notes, metadata, and analysis.
+
+An issue is a *source*: volatile, remote, read-only. What you learn while
+working it is *knowledge*: durable, local, yours. Trackers are good at the
+first and hopeless at the second. issuehub keeps the two apart on disk and
+joins them only when rendering a buffer.
+
+                                                    *issuehub-lock-in*
+issuehub deliberately does NOT implement a picker, a Git integration, a diff
+viewer, a Markdown renderer, or an AI client. It detects what you already use
+and delegates. It has no hard dependencies: every integration is a runtime
+|pcall()|, so it works with zero plugins installed — just less comfortably.
+
+Status: pre-1.0. The public API (|issuehub-api|) may break between minor
+versions until 1.0. Each break is listed in CHANGELOG.md.
+
+==============================================================================
+2. REQUIREMENTS                                     *issuehub-requirements*
+
+Required ~
+  - Neovim 0.11 or newer
+  - `curl`
+
+Recommended ~
+  - `git`      the workspace is designed to be committed
+  - `rg`       ripgrep; local search and `--regex`
+  - `sqlite3`  ranked full-text search over your notes (needs FTS5)
+  - A picker: snacks.nvim, fzf-lua, or telescope.nvim
+
+Note: `vim.net.request()` is not used. In Neovim 0.12 it is GET-only with no
+header support and cannot make an authenticated API call; the complete version
+lands in 0.13. Until then curl is the only option that does not add a hard
+dependency.
+
+==============================================================================
+3. SETUP                                                   *issuehub-setup*
+
+                                                           *issuehub.setup()*
+>lua
+    require("issuehub").setup({
+      workspace = "~/notes/issuehub",
+      providers = {
+        jira = {
+          url = "https://your-org.atlassian.net",
+          user = "you@example.com",
+          token_env = "JIRA_TOKEN",
+        },
+      },
+    })
+<
+`workspace` is required and has no default: it is a Git-managed knowledge base
+and must live somewhere you chose deliberately. |setup()| reports an error if
+it is missing, rather than failing later.
+
+Calling `setup()` is not required for the plugin to load — only for provider
+credentials, which have no sensible default. With lazy.nvim, `opts = {}` calls
+it for you and no `cmd` or `event` is needed: `plugin/issuehub.lua` registers
+commands and defers every `require`, so the plugin lazy-loads itself.
+
+==============================================================================
+4. CONFIGURATION                                          *issuehub-config*
+
+Defaults, with every option: >lua
+    {
+      workspace = nil,            -- REQUIRED, path to the Repository root
+      index = "auto",             -- "auto" | "json" | "sqlite"
+
+      providers = {},             -- see |issuehub-providers|
+
+      -- "auto"|"snacks"|"fzf"|"telescope"|"select"
+      ui = { picker = "auto" },
+
+      sync = {
+        on_open = "stale",        -- "always" | "stale" | "never"
+        stale_after = 900,        -- seconds
+      },
+
+      export = {
+        dir = nil,                -- defaults to the current directory
+        default_format = "markdown",
+      },
+
+      backend = "none",           -- see |issuehub-backends|
+      backends = {},
+
+      http = { ... },             -- see |issuehub-network|
+
+      log_level = vim.log.levels.WARN,
+    }
+<
+                                                    *issuehub-config-unknown*
+Options belonging to unreleased features are REJECTED by validation rather
+than accepted and ignored. A setting that appears to work but does nothing is
+worse than a missing feature.
+
+                                                *issuehub-credentials*
+Never put a token in your configuration file. Resolution order, first hit
+wins: >lua
+    token = function() ... end                       -- escape hatch
+    token_cmd = { "op", "read", "op://vault/jira" }  -- password manager
+    token_env = "JIRA_TOKEN"                         -- environment
+<
+Tokens are cached in memory for the session only, are passed to curl on stdin
+(never argv, so `ps` cannot see them), and are unconditionally redacted from
+the log file. `:checkhealth` reports whether a credential resolves, never its
+value.
+
+==============================================================================
+5. COMMANDS                                             *issuehub-commands*
+
+All functionality lives under one command with subcommands, so it does not
+pollute the global command namespace.
+
+                                                                  *:IssueHub*
+:IssueHub                 Open the picker over the default query.
+:IssueHub open [{uri}]    Open an issue, or the picker.
+:IssueHub search {query}  Provider-side search. The query is passed through
+                          untranslated: JQL for Jira, GitHub search
+                          qualifiers for GitHub, free text elsewhere.
+:IssueHub find {text}     Local search. Accepts `--regex` to force the
+                          ripgrep engine. See |issuehub-search|.
+:IssueHub local           Everything already cached. Works offline.
+:IssueHub sync [{target}] Re-fetch and report what moved. {target} may be a
+                          URI or a provider instance name; omitted means
+                          everything local.
+:IssueHub changed         Issues whose remote revision moved since you last
+                          opened them.
+:IssueHub refresh         Re-fetch the issue in the current buffer.
+:IssueHub bookmark        Toggle a bookmark on the current issue.
+:IssueHub bookmarks       Picker over bookmarked issues.
+:IssueHub collection ...  `add {name}` | `remove {name}` | `delete {name}` |
+                          `list` | `{name}` to open one.
+:IssueHub export [{format}] [{source}]
+                          Export a view. {format} is csv, markdown, json, or
+                          yaml. {source} is a collection name or one of
+                          `local`, `all`, `bookmarks`, `changed`; omitted
+                          means the view you were last looking at.
+:IssueHub analyze [{uri}] Analyse through the configured backend.
+:IssueHub analyses [{uri}]
+                          Browse an issue's analysis history.
+:IssueHub reindex         Rebuild the index from the cache.
+:IssueHub provider list|health
+:IssueHub health          Same as `:checkhealth issuehub`.
+
+==============================================================================
+6. MAPPINGS                                             *issuehub-mappings*
+
+No keymaps are created. These <Plug> mappings are exposed: >lua
+    vim.keymap.set("n", "<leader>ji", "<Plug>(IssueHubOpen)")
+    vim.keymap.set("n", "<leader>jf", "<Plug>(IssueHubFind)")
+    vim.keymap.set("n", "<leader>jr", "<Plug>(IssueHubRefresh)")
+<
+In an issue buffer, `gx` opens the issue in your browser via |vim.ui.open()|.
+
+==============================================================================
+7. THE ISSUE BUFFER                                       *issuehub-buffer*
+
+One Markdown buffer holds the issue (read-only, from cache) above your own
+notes (editable, from the workspace): >
+    # PROJ-123  Timeout on cache warmup        <- read-only
+    - Status:   In Progress
+    - Updated:  2026-07-19T01:15:00Z  (synced 2026-07-19T09:59:30Z)
+    - Analysis: 2026-07-19T11-17-00Z (outdated)
+    - Changed:  since you last opened it
+
+    ## Description                             <- read-only
+    ## Comments (42)                           <- read-only, foldable
+
+    ## Memo                                    <- editable -> memo.md
+    ## Metadata                                <- editable -> metadata.yaml
+    ## Prompt                                  <- editable -> prompt.md
+<
+|:write| writes the three editable sections, and only the files whose content
+actually changed — so `:w` on an unmodified buffer produces no Git churn.
+Emptying a section deletes its file rather than leaving a stub.
+
+It is plain Markdown, so |treesitter|, |folding|, |search-commands|, |mark|s,
+and any Markdown renderer work unmodified.
+
+                                                  *issuehub-buffer-readonly*
+Read-only is ADVISORY. Neovim cannot lock part of a buffer, so an edit above
+the `## Memo` heading is reverted with a warning rather than prevented;
+anything typed in the editable sections is kept. Deleting a section heading
+reverts the whole buffer, because without that sentinel the text can no longer
+be mapped back onto files.
+
+                                                  *issuehub-buffer-metadata*
+`metadata.yaml` is written back VERBATIM. Comments, key order, and spacing
+survive exactly as typed: the file is parsed for search and export, never
+reformatted.
+
+==============================================================================
+8. WORKSPACE LAYOUT                                    *issuehub-workspace*
+>
+    ~/notes/issuehub/
+    ├── .issuehub/collections/     # tracked
+    ├── .state/                    # NOT tracked: cache, index, locks
+    ├── jira/PROJ-123/
+    │   ├── memo.md
+    │   ├── metadata.yaml
+    │   ├── prompt.md
+    │   ├── state.yaml             # bookmark, last-seen revision
+    │   └── analyses/2026-07-19T11-17-00Z/
+    └── github/owner%2Frepo%23123/
+<
+The root holds only what belongs in Git. Everything derived lives under
+`.state/`, which is added to `.gitignore` automatically and is safe to delete
+at any time — the next operation rebuilds it.
+
+Issue IDs are RFC 3986 percent-encoded for path safety, so `PROJ-123` stays
+exactly that and only the rare `PROJ/123` becomes `PROJ%2F123`. Hashing was
+rejected: the tree is meant to be browsed with oil.nvim, read in a Git diff,
+and grepped by a human.
+
+==============================================================================
+9. PROVIDERS                                           *issuehub-providers*
+
+  Type       Hosts                        Auth               ID form ~
+  jira       Cloud, Server/DC             API token or PAT   PROJ-123
+  redmine    self-hosted                  X-Redmine-API-Key  12345
+  github     github.com, Enterprise       PAT (Bearer)       owner/repo#123
+  gitlab     gitlab.com, self-managed     PRIVATE-TOKEN      group/proj#12
+
+                                                *issuehub-providers-multiple*
+The configuration key is an INSTANCE name; `type` selects the implementation
+and defaults to the key. Any number of instances of one type can coexist: >lua
+    providers = {
+      jira = { url = "https://org.atlassian.net", token_env = "JIRA_CLOUD" },
+      jira_internal = {
+        type = "jira",
+        url = "https://jira.internal",
+        token_env = "JIRA_INTERNAL",
+        http = { no_proxy = "*" },
+      },
+    }
+<
+The instance name is the URI scheme, the credential key, the network-settings
+key, and the workspace directory — so `jira://PROJ-123` and
+`jira_internal://PROJ-123` never collide. Two servers routinely use the same
+issue keys.
+
+                                                   *issuehub-providers-status*
+The core interprets exactly one thing about status: whether the issue is
+`closed`. It is always taken from what the API states — Jira's
+`statusCategory`, Redmine's `/issue_statuses.json`, the `state` field on
+GitHub and GitLab — never guessed from a status label, because those are
+per-installation configurable. Anything finer (in review, QA, waiting for
+release) means different things at different organizations and stays
+provider-specific.
+
+GitHub pull requests are included alongside issues; GitHub numbers both in one
+sequence per repository, so `owner/repo#123` is unambiguous. Their status
+reads Open, Draft, Merged, or Closed.
+
+==============================================================================
+10. SEARCH                                                *issuehub-search*
+
+Two distinct operations: >
+    :IssueHub search    provider-side, online, provider's own query language
+    :IssueHub find      local, offline, across cache AND your notes
+<
+`find` covers the cached issue plus memo, metadata, and analysis history, and
+reports which of those matched: >
+    PROJ-123  In Progress  Timeout on cache warmup   [memo]
+    PROJ-140  Open         Retry storm on failover   [analyses]
+<
+Engines, chosen automatically:
+
+  With sqlite3 + FTS5   ranked full-text by relevance
+  Otherwise             ripgrep: exact lines and regexes
+  Neither               substring scan of the index
+
+`--regex` always uses ripgrep. The two are complementary: FTS5 ranks whole
+documents, which suits an accumulating knowledge base; ripgrep finds exact
+lines.
+
+==============================================================================
+11. COLLECTIONS AND EXPORT                           *issuehub-collections*
+
+Collections are local, static, cross-provider lists stored as YAML under
+`.issuehub/collections/` and committed with your workspace. They are
+deliberately static lists rather than saved queries: a list diffs cleanly, and
+"why is this issue in here" always has a literal answer.
+
+                                                          *issuehub-export*
+Export takes a |issuehub-view|, never a picker — so the same call works on a
+collection, a multi-select, or a set built by a script.
+
+Output combines the latest CACHED issue with your workspace overlay. Metadata
+keys are flattened to `meta.<key>`, multi-value fields join with `; `, and
+`fetched_at` is included so staleness travels with the data. Export performs
+no network I/O; run `:IssueHub sync` first if freshness matters.
+
+Markdown export keeps memos as prose under a `## Notes` heading rather than
+forcing multi-line text into table cells.
+
+==============================================================================
+12. BACKENDS AND ANALYSIS                               *issuehub-backends*
+
+issuehub has no AI of its own. A Backend is the only channel through which
+anything leaves your machine, and the default is `none`: nothing is sent
+anywhere unless you configure it. >lua
+    backend = "a2a",
+    backends = { a2a = { url = "http://localhost:9100" } },
+<
+`:IssueHub analyze` sends the cached issue plus your overlay, using the
+issue's own `prompt.md` when you have written one.
+
+                                                       *issuehub-staleness*
+Every analysis is kept under `analyses/<timestamp>/` with its prompt, its
+response, and the issue revision it was made against. Staleness is DERIVED
+from that revision, never stored: an analysis is `current` when the recorded
+revision matches the cached issue and `outdated` otherwise. It therefore
+survives a manual edit, a `git revert`, or a sync that happened while Neovim
+was closed — and a revert makes an analysis current again, which a stored flag
+could not do.
+
+An outdated analysis is never fed back in as context for a new one, since that
+would propagate its staleness.
+
+Note: the bundled A2A backend is written against the JSON-RPC `message/send`
+shape with agent-card discovery but has NOT been exercised against a live
+agent. Treat it as a starting point.
+
+==============================================================================
+13. CORPORATE NETWORKS                                   *issuehub-network*
+
+With no `http` block, curl honours `http_proxy`, `https_proxy`, and
+`no_proxy` from your environment. Set these to override or extend that: >lua
+    http = {
+      proxy = "http://proxy.corp.example:8080",
+      no_proxy = "localhost,.internal.example",
+      proxy_user = "DOMAIN\\you",
+      proxy_password_env = "PROXY_PASSWORD",
+      proxy_auth = "ntlm",        -- basic|digest|ntlm|negotiate|anyauth
+
+      cacert = "~/certs/corporate-root.pem",
+      client_cert = "~/certs/client.pem",
+      client_key = "~/certs/client.key",
+
+      ssl_verify = true,
+      timeout = 30000,
+      retries = 2,
+    }
+<
+Settings can be overridden per provider instance via `providers.<name>.http`,
+for the common case of an internal tracker reached directly while SaaS goes
+through the proxy.
+
+                                                     *issuehub-ssl-verify*
+`ssl_verify = false` disables certificate verification entirely: your API
+tokens travel over a connection nobody is authenticating. It is accepted
+because some internal CAs genuinely cannot be exported, but it warns at setup
+and `:checkhealth` reports it as an ERROR for as long as it is enabled. The
+supported answer to TLS interception is `cacert`, which keeps verification on.
+
+Proxy passwords and client-key passphrases are credentials and are handled
+exactly like API tokens: resolved from env or a command, passed on stdin,
+never in argv.
+
+==============================================================================
+14. LUA API                                                  *issuehub-api*
+
+                                                       *issuehub-api-public*
+The following are public and covered by the compatibility promise once 1.0 is
+tagged. Everything else — anything not listed here — is internal and may
+change without notice.
+
+issuehub ~
+    setup({opts})                      |issuehub.setup()|
+    open({opts})                       Picker over a provider's query.
+    open_uri({uri})                    Open one issue.
+    search({query}, {provider})        Provider-side search.
+    find({pattern}, {opts})            Local search. opts.regex.
+    sync({target})                     Re-fetch; report changes.
+    changed()                          Picker over changed issues.
+    analyze({uri}, {opts})             Analyse via the backend.
+    analyses({uri})                    Analysis history picker.
+    export({format}, {source})         Export a view.
+    collection({name})                 Open a collection.
+    collection_add({name})             Add current issue or view.
+    collection_remove({name})          Remove the current issue.
+    bookmarks()                        Picker over bookmarks.
+    local_issues()                     Picker over the cache.
+    reindex()                          Rebuild the index.
+    resolve_view({source})             Source name -> View.
+
+issuehub.provider ~
+    register({name}, {provider})       |issuehub-extending-provider|
+    get({name})                        Instance by name.
+    resolve({uri})                     Provider and id for a URI.
+    configured_names()
+    available_types()
+
+issuehub.backend ~
+    register({name}, {backend})        |issuehub-extending-backend|
+    send({req}, {opts}, {cb})
+    complete({prompt}, {opts}, {cb})   Free-form model completion.
+    get()
+
+issuehub.core.export ~
+    register({name}, {exporter})       |issuehub-extending-exporter|
+    write({format}, {view}, {opts})
+    formats()
+
+issuehub.core.collection ~
+    list() get({name}) add({name}, {uri}) remove({name}, {uri})
+    delete({name}) to_view({name}) containing({uri})
+
+issuehub.core.workspace ~
+    get({uri}) state({uri}) toggle_bookmark({uri})
+    changed_since_seen({uri}) with_overlay()
+
+issuehub.core.overlay ~
+    read({uri}) write({uri}, {overlay}) metadata({uri}) exists({uri})
+
+issuehub.core.analysis ~
+    list({uri}) latest({uri}) get({uri}, {stamp}) save({uri}, {data})
+    status({uri}, {revision}) context({uri}, {opts})
+
+                                                            *issuehub-view*
+issuehub.ui.view ~
+    new({opts})                        {source, label, items}
+    from_issues({issues}, {opts})
+    last()                             The view most recently shown.
+
+    A View is the single list model. Every list-shaped operation — picker,
+    export, analysis, collections — consumes a View rather than a picker, so
+    adding a picker backend adds no downstream code paths.
+
+    View:get_items()      All items.
+    View:get_selected()   The selection, or all items when there is none.
+    View:count()  View:is_empty()  View:slug()
+
+==============================================================================
+15. EXTENDING                                          *issuehub-extending*
+
+                                                 *issuehub-extending-provider*
+A provider converts a remote payload to a canonical Issue and nothing else: no
+UI, no workspace access, all I/O asynchronous, errors returned rather than
+thrown. >lua
+    require("issuehub.provider").register("mytracker", {
+      name = "mytracker",
+      setup = function(self, opts) return true end,
+      list = function(self, query, cb) cb(nil, issues) end,
+      get = function(self, id, cb) cb(nil, issue) end,
+      search = function(self, query, cb) cb(nil, issues) end,
+      health = function(self) return true, "ok" end,
+    })
+<
+Callbacks must be invoked via |vim.schedule()| if they originate in a fast
+event context. Derive `status.closed` from a field the API states outright.
+
+                                                  *issuehub-extending-backend*
+Requests carry a `kind`, and a backend advertises which kinds it handles, so
+an LLM client slots in without the interface changing: >lua
+    require("issuehub.backend").register("my-llm", {
+      name = "my-llm",
+      setup = function(self, opts) return true end,
+      capabilities = function()
+        return { kinds = { "analyze", "complete" }, streaming = true }
+      end,
+      discover = function(self, cb) cb(nil, self:capabilities()) end,
+      health = function(self) return true, "ready" end,
+      send = function(self, req, opts, cb)
+        -- req.kind, req.prompt, req.context.{issue,overlay,
+        --   selection,documents}
+        -- opts.on_chunk(text) for streaming
+        cb(nil, { text = "...", model = "..." })
+      end,
+    })
+<
+A request of an unadvertised kind is refused with a clear message rather than
+sent and misunderstood. Streaming is optional: backends that cannot stream
+simply never call `on_chunk`, and callers use one code path either way.
+
+                                                 *issuehub-extending-exporter*
+>lua
+    require("issuehub.core.export").register("xlsx", {
+      ext = "xlsx",
+      write = function(rows, columns) return content end,
+    })
+<
+                                                  *issuehub-extending-picker*
+A picker adapter implements `pick(view, opts)` and declares three
+capabilities: `preview`, `multi_select`, `actions`. Declare only those three —
+because flags the core does not branch on are adapter-internal
+presentation.
+
+==============================================================================
+16. HEALTH                                                *issuehub-health*
+>
+    :checkhealth issuehub
+<
+Reports the Neovim version, external tools, network settings (with
+credentials stripped), workspace state and whether `.state/` is git-ignored,
+the index backend and FTS5 availability, each provider instance and whether
+its credential resolves, the backend, and the active picker with its
+capabilities.
+
+Please include this output in bug reports. It never prints a credential.
+
+==============================================================================
+17. DESIGN NOTES                                          *issuehub-design*
+
+The full specification lives in DESIGN.md. The load-bearing decisions:
+
+- Workspace (logical model) and Repository (on-disk form) are distinct, so
+  the layout can change without breaking the API.
+- The View is the single list model. |issuehub-view|
+- Only `core/repository.lua` knows about paths; everything else speaks URIs.
+- The core interprets only `status.closed`. |issuehub-providers-status|
+- There is no cross-provider query language. A lowest-common-denominator
+  query DSL would be worse than either native one.
+- The index holds no truth of its own: deleting `.state/` is always safe.
+- Sync never mutates the Workspace. Your notes are yours.
+- Staleness is derived, never stored. |issuehub-staleness|
+
+vim:tw=78:ts=8:noet:ft=help:norl:
