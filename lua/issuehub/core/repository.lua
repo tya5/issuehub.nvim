@@ -76,6 +76,39 @@ function M.cache_file(uri)
   return M.state("cache", provider, issue.encode_id(id) .. ".json")
 end
 
+---Cached lowercase -> encoded name maps, one per provider cache directory.
+---
+--- Without this, every cache write scanned the whole directory, which is O(n)
+--- per write and therefore O(n²) for a bulk sync. At twenty thousand issues
+--- that is the difference between a pause and a hang.
+---@type table<string, table<string, string>>
+local case_index = {}
+
+---Drop the memo. Called when the Repository root changes.
+function M.forget_case_index()
+  case_index = {}
+end
+
+---@param provider string
+---@param dir string
+---@return table<string, string>
+local function names_of(provider, dir)
+  if case_index[dir] then
+    return case_index[dir]
+  end
+  local names = {}
+  if fs.is_dir(dir) then
+    for _, name in ipairs(fs.list(dir)) do
+      local encoded = name:match("^(.+)%.json$")
+      if encoded then
+        names[encoded:lower()] = encoded
+      end
+    end
+  end
+  case_index[dir] = names
+  return names
+end
+
 ---Detect two issue IDs that differ only by case.
 ---
 --- On case-insensitive filesystems (macOS by default) `jira://PROJ-1` and
@@ -92,29 +125,25 @@ function M.check_case_collision(uri)
   end
 
   local dir = M.state("cache", provider)
-  if not dir or not fs.is_dir(dir) then
+  if not dir then
     return true
   end
 
   local encoded = issue.encode_id(id)
-  local lowered = encoded:lower()
-  for _, name in ipairs(fs.list(dir)) do
-    local other = name:match("^(.+)%.json$")
-    if other and other ~= encoded and other:lower() == lowered then
-      return false,
-        ("issue id case collision: '%s' and '%s' map to the same path on a case-insensitive filesystem"):format(
-          issue.decode_id(other),
-          id
-        )
-    end
-  end
-  return true
-end
+  local names = names_of(provider, dir)
+  local existing = names[encoded:lower()]
 
----@return string? path
----@return string? err
-function M.index_dir()
-  return M.state("index")
+  if existing and existing ~= encoded then
+    return false,
+      ("issue id case collision: '%s' and '%s' map to the same path on a case-insensitive filesystem"):format(
+        issue.decode_id(existing),
+        id
+      )
+  end
+
+  -- Remember it, so the next write in this batch does not rescan.
+  names[encoded:lower()] = encoded
+  return true
 end
 
 ---Create the Repository skeleton if absent. Idempotent.
@@ -159,6 +188,29 @@ end
 ---@return string
 function M.layout_version()
   return LAYOUT_VERSION
+end
+
+---URIs that have a Workspace directory, as a set.
+---
+--- Two readdirs instead of three failed file opens per issue. At twenty
+--- thousand issues, of which a handful have notes, that is the difference
+--- between sixty thousand syscalls and two.
+---@return table<string, boolean>
+function M.workspace_uris()
+  local root = M.root()
+  local set = {}
+  if not root or not fs.is_dir(root) then
+    return set
+  end
+
+  for _, provider in ipairs(fs.list(root)) do
+    if not provider:match("^%.") and fs.is_dir(vim.fs.joinpath(root, provider)) then
+      for _, encoded in ipairs(fs.list(vim.fs.joinpath(root, provider))) do
+        set[("%s://%s"):format(provider, encoded)] = true
+      end
+    end
+  end
+  return set
 end
 
 ---List every URI that has a cache entry. Used to rebuild the index.

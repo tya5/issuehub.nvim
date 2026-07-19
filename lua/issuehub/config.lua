@@ -18,6 +18,10 @@ local defaults = {
   sync = {
     on_open = "stale",
     stale_after = 15 * 60,
+    -- Above this many targets, `:IssueHub sync` asks first. One request per
+    -- issue against a corporate tracker with thousands of tickets is a long
+    -- operation and possibly a rate-limit problem, so it should be deliberate.
+    confirm_above = 200,
   },
 
   -- Corporate network settings. Every field is optional, and `nil` means "let

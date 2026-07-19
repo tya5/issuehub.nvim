@@ -74,6 +74,8 @@
 ---@field token (fun(): string?)?
 ---@field default_query any?
 ---@field comment_limit integer?
+---@field max_results integer?  Results to page through; defaults to one page.
+---@field per_page integer?     Page size, capped at 100 by every provider.
 ---@field flavor string?
 ---@field http issuehub.HttpConfig?   Per-provider proxy/TLS overrides
 
@@ -113,6 +115,7 @@
 ---@class issuehub.SyncConfig
 ---@field on_open "always"|"stale"|"never"
 ---@field stale_after integer
+---@field confirm_above integer   Ask before syncing more than this many issues.
 
 ---@class issuehub.ExportConfig
 ---@field dir string?             Output directory; defaults to the cwd.

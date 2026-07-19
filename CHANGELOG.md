@@ -8,6 +8,34 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ## [Unreleased]
 
+### Added
+
+- **Pagination.** Queries fetched only the first page before, which made older
+  tickets unreachable. `providers.<name>.max_results` pages until that many
+  results and `per_page` sets the page size; the default is still one page, so
+  a large backlog is not pulled down by accident. Paging stops at a short page,
+  keeps partial results if a later page fails, and GitHub search stops before
+  its 1000-result ceiling rather than surfacing a 422.
+
+### Performance
+
+Sized for trackers with tens of thousands of tickets:
+
+- The cache's case-collision check listed the whole provider directory on every
+  write — O(n) per write, O(n²) for a bulk fetch. Now memoised.
+- Bulk fetches wrote the index once per issue, which on the sqlite backend meant
+  one `sqlite3` process per issue. `put_many` batches into a single invocation
+  inside one transaction.
+- Opening a picker read three files per issue to look for notes, nearly all of
+  which do not exist. It now resolves which issues have a workspace directory
+  with two readdirs and reads only those.
+- Cache and index writes skip `fsync`. The rename still makes them atomic;
+  durability across a power cut is worth paying for user notes and pointless for
+  `.state/`, which is declared rebuildable. Measured 1.66s to 372ms for 300
+  issues.
+- `:IssueHub sync` asks before syncing more than `sync.confirm_above` issues
+  (default 200), since it is one request each.
+
 ### Changed
 
 - **`<Plug>(IssueHubFind)` no longer prompts.** It opens the picker immediately

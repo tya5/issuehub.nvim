@@ -94,6 +94,32 @@ function GitLab:_to_issue(raw)
   })
 end
 
+---@param params table
+---@param cb fun(err: string?, issues: issuehub.Issue[]?)
+function GitLab:_paged(params, cb)
+  local max, per_page = putil.limits(self.opts)
+
+  putil.paginate({
+    max = max,
+    per_page = per_page,
+    fetch = function(cursor, done)
+      local page = cursor or 1
+      putil.call(self:_ctx(), "/issues", {
+        query = vim.tbl_extend("force", { per_page = per_page, page = page }, params),
+      }, function(err, body)
+        if err then
+          return done(err)
+        end
+        local issues = {}
+        for _, raw in ipairs(body or {}) do
+          issues[#issues + 1] = self:_to_issue(raw)
+        end
+        done(nil, issues, page + 1)
+      end)
+    end,
+  }, cb)
+end
+
 ---@param query table|string|nil
 ---@param cb fun(err: string?, issues: issuehub.Issue[]?)
 function GitLab:list(query, cb)
@@ -101,37 +127,14 @@ function GitLab:list(query, cb)
   if type(params) == "string" then
     return self:search(params, cb)
   end
-
-  putil.call(self:_ctx(), "/issues", {
-    query = vim.tbl_extend("force", { per_page = 100 }, params),
-  }, function(err, body)
-    if err then
-      return cb(err)
-    end
-    local issues = {}
-    for _, raw in ipairs(body or {}) do
-      issues[#issues + 1] = self:_to_issue(raw)
-    end
-    cb(nil, issues)
-  end)
+  self:_paged(params, cb)
 end
 
 ---Full-text search across issues the token can see.
 ---@param query string
 ---@param cb fun(err: string?, issues: issuehub.Issue[]?)
 function GitLab:search(query, cb)
-  putil.call(self:_ctx(), "/issues", {
-    query = { search = query, scope = "all", per_page = 100 },
-  }, function(err, body)
-    if err then
-      return cb(err)
-    end
-    local issues = {}
-    for _, raw in ipairs(body or {}) do
-      issues[#issues + 1] = self:_to_issue(raw)
-    end
-    cb(nil, issues)
-  end)
+  self:_paged({ search = query, scope = "all" }, cb)
 end
 
 ---@param id string  "group/project#12"

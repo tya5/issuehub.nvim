@@ -141,18 +141,29 @@ function Redmine:list(query, cb)
     params = parsed
   end
 
+  local max, per_page = putil.limits(self.opts)
+
   self:_ensure_statuses(function()
-    local q = vim.tbl_extend("force", { limit = 100 }, params)
-    putil.call(self:_ctx(), "/issues.json", { query = q }, function(err, body)
-      if err then
-        return cb(err)
-      end
-      local issues = {}
-      for _, raw in ipairs((body or {}).issues or {}) do
-        issues[#issues + 1] = self:_to_issue(raw)
-      end
-      cb(nil, issues)
-    end)
+    putil.paginate({
+      max = max,
+      per_page = per_page,
+      fetch = function(cursor, done)
+        -- Redmine pages by offset.
+        local offset = cursor or 0
+        local q = vim.tbl_extend("force", { limit = per_page, offset = offset }, params)
+        putil.call(self:_ctx(), "/issues.json", { query = q }, function(err, body)
+          if err then
+            return done(err)
+          end
+          local raw_issues = (body or {}).issues or {}
+          local issues = {}
+          for _, raw in ipairs(raw_issues) do
+            issues[#issues + 1] = self:_to_issue(raw)
+          end
+          done(nil, issues, offset + #raw_issues)
+        end)
+      end,
+    }, cb)
   end)
 end
 

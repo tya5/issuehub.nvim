@@ -134,39 +134,60 @@ function GitHub:list(query, cb)
     return self:search(query or self.opts.default_query, cb)
   end
 
-  -- /issues spans every repository the user can see, which is the closest
-  -- equivalent to Jira's "assigned to me" default.
-  putil.call(self:_ctx(), "/issues", {
-    query = { filter = "assigned", state = "open", per_page = 100 },
-  }, function(err, body)
-    if err then
-      return cb(err)
-    end
-    local issues = {}
-    for _, raw in ipairs(body or {}) do
-      issues[#issues + 1] = self:_to_issue(raw)
-    end
-    cb(nil, issues)
-  end)
+  local max, per_page = putil.limits(self.opts)
+  putil.paginate({
+    max = max,
+    per_page = per_page,
+    fetch = function(cursor, done)
+      -- /issues spans every repository the user can see, which is the closest
+      -- equivalent to Jira's "assigned to me" default.
+      putil.call(self:_ctx(), "/issues", {
+        query = { filter = "assigned", state = "open", per_page = per_page, page = cursor or 1 },
+      }, function(err, body)
+        if err then
+          return done(err)
+        end
+        local issues = {}
+        for _, raw in ipairs(body or {}) do
+          issues[#issues + 1] = self:_to_issue(raw)
+        end
+        done(nil, issues, (cursor or 1) + 1)
+      end)
+    end,
+  }, cb)
 end
 
 ---Passed through as a GitHub search qualifier string, not translated (§7).
 ---@param query string
 ---@param cb fun(err: string?, issues: issuehub.Issue[]?)
 function GitHub:search(query, cb)
-  putil.call(self:_ctx(), "/search/issues", {
-    query = { q = query, per_page = 100 },
-    headers = { Accept = "application/vnd.github.text-match+json" },
-  }, function(err, body)
-    if err then
-      return cb(err)
-    end
-    local issues = {}
-    for _, raw in ipairs((body or {}).items or {}) do
-      issues[#issues + 1] = self:_to_issue(raw)
-    end
-    cb(nil, issues)
-  end)
+  local max, per_page = putil.limits(self.opts)
+
+  putil.paginate({
+    max = max,
+    per_page = per_page,
+    fetch = function(cursor, done)
+      local page = cursor or 1
+      -- GitHub's search API refuses past 1000 results, so stop before it errors
+      -- rather than surfacing a 422 as a failed search.
+      if (page - 1) * per_page >= 1000 then
+        return done(nil, {}, nil)
+      end
+
+      putil.call(self:_ctx(), "/search/issues", {
+        query = { q = query, per_page = per_page, page = page },
+      }, function(err, body)
+        if err then
+          return done(err)
+        end
+        local issues = {}
+        for _, raw in ipairs((body or {}).items or {}) do
+          issues[#issues + 1] = self:_to_issue(raw)
+        end
+        done(nil, issues, page + 1)
+      end)
+    end,
+  }, cb)
 end
 
 ---@param id string  "owner/repo#123"

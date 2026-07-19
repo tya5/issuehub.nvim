@@ -16,6 +16,7 @@ end
 local function fresh(backend)
   config.setup({ workspace = vim.fn.tempname(), index = backend })
   index_mod.reset()
+  require("issuehub.core.repository").forget_case_index()
   require("issuehub.core.repository").ensure()
   return index_mod.get()
 end
@@ -177,5 +178,68 @@ describe("sqlite full-text search over notes", function()
     -- The index holds no truth of its own, so a rebuild must recover the prose
     -- from the Repository.
     assert.equals(1, #index:search("eviction"))
+  end)
+end)
+
+describe("bulk writes", function()
+  local function many(n)
+    local issues = {}
+    for i = 1, n do
+      issues[i] = make("B-" .. i, false, "2026-07-19T00:00:00Z")
+    end
+    return issues
+  end
+
+  it("indexes a batch in one round trip, not one per issue", function()
+    local index = fresh("json")
+    local calls = 0
+    local original = index.put
+    index.put = function(self, entry)
+      calls = calls + 1
+      return original(self, entry)
+    end
+
+    require("issuehub.core.cache").put_all(many(50))
+    -- put_all must go through put_many; per-issue put would mean 50 sqlite3
+    -- process spawns on the other backend.
+    assert.equals(0, calls)
+    assert.equals(50, #index:list())
+  end)
+
+  it("preserves bookmarks and last-seen markers across a batch", function()
+    local index = fresh("json")
+    require("issuehub.core.cache").put_all(many(3))
+    index:set_bookmark("jira://B-1", true)
+    index:set_seen("jira://B-1", "2026-07-19T00:00:00Z")
+
+    require("issuehub.core.cache").put_all(many(3))
+
+    local found
+    for _, item in ipairs(index:list()) do
+      if item.uri == "jira://B-1" then
+        found = item
+      end
+    end
+    -- User data must survive a re-sync; only payload fields are overwritten.
+    assert.is_true(found.bookmarked)
+    assert.equals("2026-07-19T00:00:00Z", found.seen_at)
+  end)
+
+  it("scans a provider's cache directory once per batch, not once per issue", function()
+    fresh("json")
+    local fs = require("issuehub.util.fs")
+    local scans = 0
+    local original = fs.list
+    fs.list = function(dir)
+      scans = scans + 1
+      return original(dir)
+    end
+
+    require("issuehub.core.cache").put_all(many(100))
+    fs.list = original
+
+    -- The case-collision check used to list the whole directory per write,
+    -- which is O(n²) for a bulk sync.
+    assert.truthy(scans < 10, "directory scanned " .. scans .. " times for 100 writes")
   end)
 end)

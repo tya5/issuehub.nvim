@@ -158,11 +158,14 @@ local function documents(uri)
   }
 end
 
+---SQL for one issue's rows.
 ---@param issue issuehub.Issue
-function Sqlite:put(issue)
-  self:_ensure()
+---@param docs table<string, string>?
+---@param fts boolean
+---@return string
+local function upsert_sql(issue, docs, fts)
   local provider = issue_mod.parse(issue.uri)
-  local sql = table.concat({
+  local sql = {
     "INSERT INTO issues (uri, provider, id, title, status, closed, assignee, updated_at)",
     ("VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"):format(
       q(issue.uri),
@@ -175,26 +178,54 @@ function Sqlite:put(issue)
       q(issue.updated_at)
     ),
     "ON CONFLICT(uri) DO UPDATE SET",
-    "  title=excluded.title, status=excluded.status, closed=excluded.closed,",
     -- seen_at and bookmarked are user data, not payload: never overwritten here.
+    "  title=excluded.title, status=excluded.status, closed=excluded.closed,",
     "  assignee=excluded.assignee, updated_at=excluded.updated_at;",
-  }, "\n")
-  self:_exec(sql)
+  }
 
-  if self:has_fts() then
-    local docs = documents(issue.uri)
-    self:_exec(("DELETE FROM issues_fts WHERE uri = %s;"):format(q(issue.uri)))
-    self:_exec(
-      ("INSERT INTO issues_fts (uri, title, description, memo, metadata, analyses) VALUES (%s, %s, %s, %s, %s, %s);"):format(
-        q(issue.uri),
-        q(issue.title),
-        q(issue.description),
-        q(docs.memo),
-        q(docs.metadata),
-        q(docs.analyses)
-      )
-    )
+  if fts then
+    docs = docs or { memo = "", metadata = "", analyses = "" }
+    sql[#sql + 1] = ("DELETE FROM issues_fts WHERE uri = %s;"):format(q(issue.uri))
+    sql[#sql + 1] = (
+      "INSERT INTO issues_fts (uri, title, description, memo, metadata, analyses) "
+      .. "VALUES (%s, %s, %s, %s, %s, %s);"
+    ):format(q(issue.uri), q(issue.title), q(issue.description), q(docs.memo), q(docs.metadata), q(docs.analyses))
   end
+
+  return table.concat(sql, "\n")
+end
+
+---@param issue issuehub.Issue
+function Sqlite:put(issue)
+  self:_ensure()
+  local fts = self:has_fts()
+  self:_exec(upsert_sql(issue, fts and documents(issue.uri) or nil, fts))
+end
+
+---Write many issues in ONE sqlite3 invocation.
+---
+--- Each _exec spawns a process, so a per-issue write turns a sync of twenty
+--- thousand issues into twenty thousand process spawns. Batching also lets the
+--- whole thing run in a single transaction.
+---@param issues issuehub.Issue[]
+function Sqlite:put_many(issues)
+  if #issues == 0 then
+    return
+  end
+  self:_ensure()
+
+  local fts = self:has_fts()
+  -- Which issues have notes at all, resolved once rather than per issue.
+  local has_workspace = fts and require("issuehub.core.repository").workspace_uris() or {}
+
+  local parts = { "BEGIN;" }
+  for _, issue in ipairs(issues) do
+    local docs = (fts and has_workspace[issue.uri]) and documents(issue.uri) or nil
+    parts[#parts + 1] = upsert_sql(issue, docs, fts)
+  end
+  parts[#parts + 1] = "COMMIT;"
+
+  self:_exec(table.concat(parts, "\n"))
 end
 
 ---@param uri string

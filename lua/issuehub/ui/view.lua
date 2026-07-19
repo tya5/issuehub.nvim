@@ -59,8 +59,12 @@ end
 ---@return issuehub.ViewItem[]
 function M.with_notes(items)
   local overlay = require("issuehub.core.overlay")
+  -- Resolved once for the whole list: without it this opened three files per
+  -- issue, nearly all of which do not exist.
+  local has_workspace = require("issuehub.core.repository").workspace_uris()
+
   for _, item in ipairs(items) do
-    local notes = overlay.searchable(item.uri)
+    local notes = has_workspace[item.uri] and overlay.searchable(item.uri) or ""
     item.notes = (builtin_tokens(item) .. (notes ~= "" and (" " .. notes) or ""))
   end
   return items

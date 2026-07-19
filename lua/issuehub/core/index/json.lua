@@ -38,7 +38,7 @@ end
 function Json:_flush()
   local path = self:_path()
   if path then
-    fs.write_json(path, { version = repository.layout_version(), items = self.items or {} })
+    fs.write_json(path, { version = repository.layout_version(), items = self.items or {} }, { sync = false })
   end
 end
 
@@ -50,6 +50,22 @@ function Json:put(issue)
   -- seen_at belongs to the user, not the payload: carry it across a refresh.
   item.seen_at = previous and previous.seen_at or nil
   items[issue.uri] = item
+  self:_flush()
+end
+
+---Write many at once, flushing the file once rather than per issue.
+---
+--- The json backend rewrites the whole file on every flush, so a per-issue
+--- flush makes a bulk sync O(n²).
+---@param issues issuehub.Issue[]
+function Json:put_many(issues)
+  local items = self:_load()
+  for _, issue in ipairs(issues) do
+    local previous = items[issue.uri]
+    local item = issue_mod.to_item(issue, previous and previous.bookmarked)
+    item.seen_at = previous and previous.seen_at or nil
+    items[issue.uri] = item
+  end
   self:_flush()
 end
 

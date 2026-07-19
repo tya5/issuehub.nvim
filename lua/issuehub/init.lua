@@ -16,6 +16,7 @@ function M.setup(opts)
   -- Cached singletons must not survive a re-setup with different options.
   require("issuehub.provider").reset()
   require("issuehub.core.index").reset()
+  require("issuehub.core.repository").forget_case_index()
   require("issuehub.ui.picker").reset()
   require("issuehub.backend").reset()
 
@@ -379,6 +380,26 @@ function M.sync(target)
     return vim.notify("issuehub: nothing to sync yet — open some issues first", vim.log.levels.INFO)
   end
 
+  local threshold = require("issuehub.config").get().sync.confirm_above
+  if threshold and threshold > 0 and #uris > threshold then
+    -- One request per issue. On a tracker with thousands of tickets that is
+    -- minutes of traffic and a plausible rate-limit problem, so it is asked
+    -- rather than assumed.
+    return vim.ui.select({ "no", "yes" }, {
+      prompt = ("Sync %d issues? That is one request each."):format(#uris),
+    }, function(choice)
+      if choice == "yes" then
+        M._sync(uris)
+      end
+    end)
+  end
+
+  M._sync(uris)
+end
+
+---@param uris string[]
+function M._sync(uris)
+  local sync = require("issuehub.core.sync")
   vim.notify(("issuehub: syncing %d issue(s)…"):format(#uris))
 
   sync.many(uris, nil, function(result)

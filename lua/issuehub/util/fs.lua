@@ -48,11 +48,18 @@ end
 ---Write atomically: a reader either sees the old file or the new one, never a
 ---partial write. Matters because the Repository is Git-managed and may be read
 ---by other tools at any moment.
+---
+--- `opts.sync = false` skips the fsync. The rename still makes the write
+--- atomic; fsync only adds durability across a power cut, which is worth paying
+--- for user-authored notes and pointless for `.state/`, which is declared
+--- rebuildable and safe to delete. At a few thousand files the difference is
+--- minutes.
 ---@param path string
 ---@param content string
+---@param opts { sync: boolean? }?
 ---@return boolean ok
 ---@return string? err
-function M.write(path, content)
+function M.write(path, content, opts)
   local dir = vim.fs.dirname(path)
   local ok, merr = M.mkdirp(dir)
   if not ok then
@@ -65,9 +72,12 @@ function M.write(path, content)
     return false, oerr
   end
 
+  local durable = not (opts and opts.sync == false)
   local wok, werr = pcall(function()
     assert(uv.fs_write(fd, content))
-    assert(uv.fs_fsync(fd))
+    if durable then
+      assert(uv.fs_fsync(fd))
+    end
   end)
   uv.fs_close(fd)
 
@@ -85,10 +95,12 @@ function M.write(path, content)
 end
 
 ---@param path string
+---@param value any
+---@param opts { sync: boolean? }?
 ---@return boolean ok
 ---@return string? err
-function M.write_json(path, value)
-  return M.write(path, vim.json.encode(value))
+function M.write_json(path, value, opts)
+  return M.write(path, vim.json.encode(value), opts)
 end
 
 ---@param path string

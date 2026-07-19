@@ -279,6 +279,22 @@ and grepped by a human.
   github     github.com, Enterprise       PAT (Bearer)       owner/repo#123
   gitlab     gitlab.com, self-managed     PRIVATE-TOKEN      group/proj#12
 
+                                                   *issuehub-providers-paging*
+A query fetches ONE page (100 issues) by default, so a large backlog is never
+pulled down by accident. To page further: >lua
+    github = {
+      token_cmd = { "gh", "auth", "token" },
+      max_results = 500,   -- page until this many
+      per_page = 100,      -- page size; capped at 100 by every provider
+    }
+<
+Both are per instance. Paging stops at a short page, and GitHub search stops
+before its 1000-result ceiling rather than erroring. For older tickets a
+targeted `:IssueHub search` is usually better than paging.
+
+`:IssueHub sync` with no argument asks before syncing more than
+`sync.confirm_above` issues (default 200): it is one request each.
+
                                                 *issuehub-providers-multiple*
 The configuration key is an INSTANCE name; `type` selects the implementation
 and defaults to the key. Any number of instances of one type can coexist: >lua

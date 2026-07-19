@@ -30,11 +30,12 @@ function M.get(uri)
   return entry
 end
 
+---Write the cache file, without touching the index.
 ---@param issue issuehub.Issue
----@param opts { partial: boolean? }?
+---@param partial boolean
 ---@return boolean ok
 ---@return string? err
-function M.put(issue, opts)
+local function write_entry(issue, partial)
   local path, err = repository.cache_file(issue.uri)
   if not path then
     return false, err
@@ -44,8 +45,6 @@ function M.put(issue, opts)
   if not ok_case then
     return false, cerr
   end
-
-  local partial = opts and opts.partial == true or false
 
   -- A partial result must never overwrite a complete one: the picker refreshing
   -- a list would otherwise blank out descriptions already fetched by get().
@@ -59,24 +58,46 @@ function M.put(issue, opts)
     end
   end
 
+  -- No fsync: this file lives under .state/ and is rebuildable by definition.
   local ok, werr = fs.write_json(path, {
     fetched_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
     partial = partial,
     issue = issue,
-  })
+  }, { sync = false })
   if not ok then
     return false, werr
+  end
+  return true
+end
+
+---@param issue issuehub.Issue
+---@param opts { partial: boolean? }?
+---@return boolean ok
+---@return string? err
+function M.put(issue, opts)
+  local ok, err = write_entry(issue, opts and opts.partial == true or false)
+  if not ok then
+    return false, err
   end
   require("issuehub.core.index").get():put(issue)
   return true
 end
 
 ---Store results from list()/search(), which carry no description or comments.
+---
+--- Files first, then ONE index write: indexing per issue spawns a sqlite3
+--- process per issue, which is what makes a large sync unusable.
 ---@param issues issuehub.Issue[]
+---@return integer written
 function M.put_all(issues)
+  local stored = {}
   for _, issue in ipairs(issues) do
-    M.put(issue, { partial = true })
+    if write_entry(issue, true) then
+      stored[#stored + 1] = issue
+    end
   end
+  require("issuehub.core.index").get():put_many(stored)
+  return #stored
 end
 
 ---@param uri string

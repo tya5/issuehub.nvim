@@ -58,6 +58,37 @@ use and delegates:
 Any number of instances of each type can be registered — see
 [Multiple servers](#multiple-servers).
 
+### Large trackers
+
+By default a query fetches **one page** (100 issues). A backlog of twenty
+thousand tickets is not pulled down by accident.
+
+```lua
+github = {
+  token_cmd = { "gh", "auth", "token" },
+  max_results = 500,   -- page through until this many (default: one page)
+  per_page = 100,      -- page size; every provider caps this at 100
+},
+```
+
+`max_results` is per provider instance, so a small internal tracker and a large
+corporate one can differ. Paging stops early at a short page, and GitHub search
+stops before its 1000-result ceiling rather than erroring.
+
+For older tickets, a targeted query usually beats paging:
+
+```vim
+:IssueHub search project = PROJ AND updated >= -90d
+```
+
+Other things sized for a big tracker:
+
+- `:IssueHub sync` with no argument asks for confirmation above
+  `sync.confirm_above` (default 200), because it is one request per issue.
+- Cache and index writes skip `fsync` — `.state/` is rebuildable by design, and
+  the durability was costing more than it bought.
+- A bulk fetch writes the index once rather than once per issue.
+
 ### Multiple servers
 
 The config key is an **instance name**, and `type` selects the implementation.

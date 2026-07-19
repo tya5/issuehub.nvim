@@ -136,3 +136,105 @@ describe("github provider", function()
     assert.equals("ghp_s3cret", p.http.calls[1].auth.bearer)
   end)
 end)
+
+describe("pagination", function()
+  local function paged(total, per_page)
+    -- A fake that serves `total` issues across pages of `per_page`.
+    local calls = {}
+    return {
+      calls = calls,
+      request = function(req, cb)
+        calls[#calls + 1] = req
+        local page = req.query and req.query.page or 1
+        local size = req.query and req.query.per_page or 100
+        local items = {}
+        for i = (page - 1) * size + 1, math.min(page * size, total) do
+          items[#items + 1] = vim.tbl_deep_extend("force", vim.deepcopy(ISSUE), { number = i })
+        end
+        local body = req.url:find("/search/") and { items = items } or items
+        cb(nil, {
+          status = 200,
+          body = "",
+          headers = {},
+          json = function()
+            return body
+          end,
+        })
+      end,
+    }
+  end
+
+  local function provider_with(http, opts)
+    helpers.configure("github", vim.tbl_extend("force", { token_env = "SPEC_GH" }, opts or {}))
+    vim.env.SPEC_GH = "t"
+    local p = github.new()
+    p.http = http
+    p:setup(require("issuehub.config").get().providers.github)
+    return p
+  end
+
+  it("fetches one page by default", function()
+    local http = paged(250, 100)
+    local p = provider_with(http)
+    local issues = helpers.sync(function(cb)
+      p:list(nil, cb)
+    end)
+    -- Without max_results, one request: an old backlog must not be pulled by
+    -- accident.
+    assert.equals(100, #issues)
+    assert.equals(1, #http.calls)
+  end)
+
+  it("follows pages up to max_results", function()
+    local http = paged(250, 100)
+    local p = provider_with(http, { max_results = 250 })
+    local issues = helpers.sync(function(cb)
+      p:list(nil, cb)
+    end)
+    assert.equals(250, #issues)
+    assert.equals(3, #http.calls)
+    assert.equals(1, http.calls[1].query.page)
+    assert.equals(3, http.calls[3].query.page)
+  end)
+
+  it("stops at a short page rather than asking for one more", function()
+    local http = paged(150, 100)
+    local p = provider_with(http, { max_results = 1000 })
+    local issues = helpers.sync(function(cb)
+      p:list(nil, cb)
+    end)
+    assert.equals(150, #issues)
+    assert.equals(2, #http.calls)
+  end)
+
+  it("stops at exactly max_results even mid-page", function()
+    local http = paged(500, 100)
+    local p = provider_with(http, { max_results = 120 })
+    local issues = helpers.sync(function(cb)
+      p:list(nil, cb)
+    end)
+    assert.equals(120, #issues)
+    assert.equals(2, #http.calls)
+  end)
+
+  it("honours a smaller page size", function()
+    local http = paged(100, 25)
+    local p = provider_with(http, { max_results = 100, per_page = 25 })
+    local issues = helpers.sync(function(cb)
+      p:list(nil, cb)
+    end)
+    assert.equals(100, #issues)
+    assert.equals(25, http.calls[1].query.per_page)
+  end)
+
+  it("stops before GitHub's 1000-result search ceiling", function()
+    local http = paged(5000, 100)
+    local p = provider_with(http, { max_results = 5000 })
+    local issues = helpers.sync(function(cb)
+      p:search("is:issue", cb)
+    end)
+    -- The API returns 422 past 1000; stopping first keeps it a result rather
+    -- than an error.
+    assert.equals(1000, #issues)
+  end)
+end)

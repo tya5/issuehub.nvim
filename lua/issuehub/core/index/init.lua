@@ -10,6 +10,7 @@ local M = {}
 ---@field name string
 ---@field put fun(self, issue: issuehub.Issue)   Also indexes the issue's notes,
 ---                                              where the backend supports it.
+---@field put_many fun(self, issues: issuehub.Issue[])  Batched; one round trip.
 ---@field delete fun(self, uri: string)
 ---@field set_bookmark fun(self, uri: string, value: boolean)
 ---@field set_seen fun(self, uri: string, updated_at: string?)
@@ -46,6 +47,14 @@ end
 function M.get()
   if not instance then
     instance = build()
+    if not instance.put_many then
+      -- Third-party backends need not implement batching.
+      instance.put_many = function(self, issues)
+        for _, issue in ipairs(issues) do
+          self:put(issue)
+        end
+      end
+    end
   end
   return instance
 end
