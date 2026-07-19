@@ -323,13 +323,23 @@ reports which of those matched: >
 <
 Engines, chosen automatically:
 
-  With sqlite3 + FTS5   ranked full-text by relevance
-  Otherwise             ripgrep: exact lines and regexes
-  Neither               substring scan of the index
+  ASCII query, sqlite3 + FTS5   ranked full-text by relevance
+  Non-ASCII query               ripgrep (see below)
+  `--regex`                     ripgrep
+  No FTS5                       ripgrep
+  Neither available             substring scan of the index; warns
 
-`--regex` always uses ripgrep. The two are complementary: FTS5 ranks whole
-documents, which suits an accumulating knowledge base; ripgrep finds exact
-lines.
+The two are complementary: FTS5 ranks whole documents, which suits an
+accumulating knowledge base; ripgrep finds exact lines.
+
+                                                  *issuehub-search-multibyte*
+Non-ASCII queries always use ripgrep. FTS5's `unicode61` tokenizer splits on
+whitespace, so a run of Japanese becomes a SINGLE token:
+`認証まわりの調査メモ` is one term, and searching `認証` matches nothing.
+
+The `trigram` tokenizer fixes 3-character queries but still fails on
+2-character ones, the most common Japanese word length. ripgrep handles all
+of it, so install ripgrep if you write notes in a language without spaces.
 
 ==============================================================================
 11. COLLECTIONS AND EXPORT                           *issuehub-collections*

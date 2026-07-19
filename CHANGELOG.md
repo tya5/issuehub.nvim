@@ -8,6 +8,22 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ## [Unreleased]
 
+### Fixed
+
+- **Japanese (and any space-less script) was silently unsearchable.** FTS5's
+  `unicode61` tokenizer splits on whitespace, so `認証まわりの調査メモ` was
+  indexed as one token and searching `認証` returned nothing — no error, just an
+  empty result. The `trigram` tokenizer was evaluated and rejected: it fixes
+  3-character queries but not 2-character ones, which is the most common
+  Japanese word length. Non-ASCII queries now route to ripgrep, which handles
+  all of it. `issuehub.search_engine()` exposes the rule as a pure function so
+  it is pinned by specs rather than buried in a branch.
+- The snacks picker preview wrote into `ctx.buf`, but snacks hands the previewer
+  an object rather than a buffer handle; the preview pane showed an error.
+- The fzf-lua adapter declared `preview = true` while implementing no previewer.
+  It now declares `preview = false`, and a spec pins every adapter's
+  capabilities so a false claim fails the suite instead of a user's pane.
+
 ### Documentation
 
 - Install instructions now cover a trap found while installing into a real

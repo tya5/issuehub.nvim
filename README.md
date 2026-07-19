@@ -485,16 +485,25 @@ metadata, and analysis history — and tells you which of those matched:
 
 Two engines, chosen automatically:
 
-| | With `index = "sqlite"` + FTS5 | Otherwise |
-| --- | --- | --- |
-| Engine | SQLite FTS5 | ripgrep |
-| Ranking | by relevance | by match order |
-| `--regex` | falls through to ripgrep | native |
+| Query | Engine | Why |
+| ----- | ------ | --- |
+| ASCII, with sqlite3 + FTS5 | SQLite FTS5 | ranked by relevance |
+| Non-ASCII (Japanese, Chinese, Thai …) | ripgrep | see below |
+| `--regex` | ripgrep | FTS5 cannot do it |
+| No FTS5 | ripgrep | |
+| Neither available | index substring scan | incomplete; warns |
 
 They are complementary rather than redundant: FTS5 ranks whole documents by
-relevance, which is what you want in an accumulating knowledge base; ripgrep
-finds exact lines and regexes. Without either, `find` degrades to a substring
-scan of the index.
+relevance, which suits an accumulating knowledge base; ripgrep finds exact lines
+and regexes.
+
+> **Why non-ASCII goes to ripgrep.** FTS5's `unicode61` tokenizer splits on
+> whitespace, so a run of Japanese becomes a *single token* —
+> `認証まわりの調査メモ` is one term, and searching `認証` matches nothing. The
+> `trigram` tokenizer fixes 3-character queries but still fails on 2-character
+> ones, which is the most common Japanese word length. ripgrep handles all of
+> it, so those queries are routed there. Install ripgrep if you write notes in
+> a language without spaces.
 
 ### Collections and export
 

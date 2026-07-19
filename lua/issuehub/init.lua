@@ -95,10 +95,34 @@ function M.search(query, provider_name)
   end)
 end
 
----Local search.
+---Which engine should answer a local search.
 ---
----Ranked full-text via the index when it can, ripgrep otherwise — and always
----ripgrep for `--regex`, since the index cannot answer that (§15).
+---Exposed as a pure function because the rule is not obvious and is worth
+---pinning: FTS5's unicode61 tokenizer splits on whitespace, so a run of
+---Japanese (or Chinese, or Thai) becomes ONE token and substring search cannot
+---match it. The trigram tokenizer would fix 3+ character queries but not
+---2-character ones, which is the most common Japanese word length. ripgrep
+---handles all of it. The two engines were already complementary (§15); this
+---routes by what each is actually good at.
+---@param pattern string
+---@param opts { regex: boolean? }?
+---@return "ripgrep"|"index"
+function M.search_engine(pattern, opts)
+  opts = opts or {}
+  if opts.regex then
+    return "ripgrep"
+  end
+  if pattern:find("[\128-\255]") then
+    return "ripgrep"
+  end
+  local index = require("issuehub.core.index").get()
+  if index.has_fts and index:has_fts() then
+    return "index"
+  end
+  return "ripgrep"
+end
+
+---Local search.
 ---@param pattern string
 ---@param opts { regex: boolean? }?
 function M.find(pattern, opts)
@@ -107,17 +131,21 @@ function M.find(pattern, opts)
   local index = require("issuehub.core.index").get()
 
   local items, err
-  local use_ripgrep = opts.regex or not (index.has_fts and index:has_fts())
-
-  if use_ripgrep and search.available() then
-    items, err = search.find(pattern, opts)
-    if err then
-      vim.notify("issuehub: " .. err, vim.log.levels.WARN)
+  if M.search_engine(pattern, opts) == "ripgrep" then
+    if search.available() then
+      items, err = search.find(pattern, opts)
+      if err then
+        vim.notify("issuehub: " .. err, vim.log.levels.WARN)
+        items = index:search(pattern)
+      end
+    else
+      local why = opts.regex and "--regex" or "this search"
+      vim.notify(
+        ("issuehub: %s needs ripgrep, which is not installed — results will be incomplete"):format(why),
+        vim.log.levels.WARN
+      )
       items = index:search(pattern)
     end
-  elseif opts.regex then
-    vim.notify("issuehub: --regex needs ripgrep; falling back to a plain search", vim.log.levels.WARN)
-    items = index:search(pattern)
   else
     items = index:search(pattern)
   end

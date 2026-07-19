@@ -132,3 +132,60 @@ describe("search.grep", function()
     assert.equals(0, #hits)
   end)
 end)
+
+describe("multibyte search", function()
+  before_each(fresh)
+
+  it("finds Japanese text in a memo via ripgrep", function()
+    if not search.available() then
+      return
+    end
+    cache.put(issue_mod.normalize({
+      provider = "jira",
+      id = "PROJ-1",
+      title = "Timeout",
+      status = { id = "1", name = "Open" },
+      updated_at = "2026-07-19T10:00:00Z",
+    }))
+    overlay.write("jira://PROJ-1", { memo = "認証まわりの調査メモ" })
+
+    -- Two characters is the most common Japanese word length, and the length
+    -- neither unicode61 nor trigram can match.
+    local items = search.find("認証")
+    assert.equals(1, #items)
+    assert.equals("memo", items[1].matched_in)
+
+    assert.equals(1, #search.find("調査"))
+    assert.equals(0, #search.find("存在しない語"))
+  end)
+end)
+
+describe("find engine routing", function()
+  local issuehub = require("issuehub")
+
+  it("sends non-ASCII queries to ripgrep even when FTS5 is available", function()
+    config.setup({ workspace = vim.fn.tempname(), index = "sqlite" })
+    require("issuehub.core.index").reset()
+    repository.ensure()
+
+    local index = require("issuehub.core.index").get()
+    if index.name ~= "sqlite" or not index:has_fts() then
+      return -- without FTS5 everything routes to ripgrep anyway
+    end
+
+    -- ASCII gets the ranked engine...
+    assert.equals("index", issuehub.search_engine("eviction"))
+    -- ...but FTS5 makes a whole Japanese run one token, so this must not.
+    assert.equals("ripgrep", issuehub.search_engine("認証"))
+    assert.equals("ripgrep", issuehub.search_engine("調査メモ"))
+    -- and --regex always bypasses the index.
+    assert.equals("ripgrep", issuehub.search_engine("cache.*", { regex = true }))
+  end)
+
+  it("uses ripgrep for everything when there is no FTS5", function()
+    config.setup({ workspace = vim.fn.tempname(), index = "json" })
+    require("issuehub.core.index").reset()
+    repository.ensure()
+    assert.equals("ripgrep", issuehub.search_engine("eviction"))
+  end)
+end)
