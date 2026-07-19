@@ -27,11 +27,80 @@ end
 ---@class issuehub.RenderResult
 ---@field lines string[]
 ---@field sections table<string, { first: integer, last: integer }>  1-indexed, inclusive
+---@field readonly_until integer  Last line of the read-only prefix.
+
+---Headings that delimit the editable regions. These are sentinels: writeback
+---re-parses the buffer by locating them, so they must be stable and unique.
+M.SECTIONS = {
+  { field = "memo", heading = "## Memo" },
+  { field = "metadata", heading = "## Metadata" },
+  { field = "prompt", heading = "## Prompt" },
+}
+
+---@param lines string[]
+---@return table<string, {first: integer, last: integer}>? sections
+---@return string? err
+function M.parse_sections(lines)
+  local found = {}
+  for index, line in ipairs(lines) do
+    for _, section in ipairs(M.SECTIONS) do
+      if line == section.heading then
+        if found[section.field] then
+          return nil, ("duplicate '%s' heading"):format(section.heading)
+        end
+        found[section.field] = index
+      end
+    end
+  end
+
+  local order = {}
+  for _, section in ipairs(M.SECTIONS) do
+    if not found[section.field] then
+      return nil, ("missing '%s' heading"):format(section.heading)
+    end
+    order[#order + 1] = { field = section.field, at = found[section.field] }
+  end
+  table.sort(order, function(a, b)
+    return a.at < b.at
+  end)
+
+  local ranges = {}
+  for i, entry in ipairs(order) do
+    local next_at = order[i + 1] and order[i + 1].at or (#lines + 1)
+    -- Content starts after the heading and the blank line beneath it.
+    ranges[entry.field] = { first = entry.at + 1, last = next_at - 1 }
+  end
+  return ranges
+end
+
+---Extract the edited text of each editable region.
+---@param lines string[]
+---@return table<string, string>? content
+---@return string? err
+function M.extract(lines)
+  local ranges, err = M.parse_sections(lines)
+  if not ranges then
+    return nil, err
+  end
+
+  local out = {}
+  for field, range in pairs(ranges) do
+    local body = {}
+    for i = range.first, range.last do
+      body[#body + 1] = lines[i] or ""
+    end
+    -- Strip the framing blank lines the renderer adds, and any the user left.
+    local text = table.concat(body, "\n")
+    out[field] = (text:gsub("^%s*\n", ""):gsub("%s+$", ""))
+  end
+  return out
+end
 
 ---@param issue issuehub.Issue
 ---@param entry issuehub.CacheEntry?
+---@param overlay issuehub.Overlay?
 ---@return issuehub.RenderResult
-function M.issue(issue, entry)
+function M.issue(issue, entry, overlay)
   local lines = {}
   local sections = {}
 
@@ -102,16 +171,26 @@ function M.issue(issue, entry)
     end
   end)
 
-  -- Memo / Metadata / Prompt become editable regions in 0.2. They are rendered
-  -- now as placeholders so the layout users learn does not shift later.
-  section("workspace", function()
-    push("## Memo")
-    push("")
-    push("_(editable in 0.2)_")
-    push("")
-  end)
+  -- Editable regions. Everything above is read-only; these three map to files
+  -- in the Workspace and are written back on :w (§6).
+  overlay = overlay or { memo = "", metadata = "", prompt = "" }
 
-  return { lines = lines, sections = sections }
+  local readonly_until = #lines
+
+  for _, spec in ipairs(M.SECTIONS) do
+    section(spec.field, function()
+      push(spec.heading)
+      push("")
+      for _, line in ipairs(split(overlay[spec.field] or "")) do
+        push(line)
+      end
+      -- A trailing blank line gives the user somewhere to type in an empty
+      -- section without first having to open a line.
+      push("")
+    end)
+  end
+
+  return { lines = lines, sections = sections, readonly_until = readonly_until }
 end
 
 return M

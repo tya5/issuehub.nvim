@@ -10,6 +10,29 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ### Added
 
+- **Workspace overlay (0.2).** The issue buffer now has three editable regions —
+  Memo, Metadata, and Prompt — written back to `memo.md`, `metadata.yaml`, and
+  `prompt.md` on `:w`. Only files whose content changed are written, so `:w` on
+  an unmodified buffer produces no Git churn, and emptying a section deletes its
+  file rather than leaving a stub.
+  - **metadata.yaml round-trips verbatim.** Writeback is the buffer text, so
+    comments, key order, and spacing survive. The YAML parser is used only for
+    reading (search, filtering, export), which sidesteps round-trip fidelity
+    entirely rather than trying to preserve it through a parse/serialize cycle.
+  - Read-only enforcement is advisory, as designed: Neovim cannot lock part of a
+    buffer, so an edit above `## Memo` is reverted with a warning while
+    everything typed in the editable regions is kept. Destroying a section
+    heading reverts the whole buffer, because without it the text can no longer
+    be mapped back onto files.
+  - A background refresh preserves unsaved edits rather than overwriting them.
+- **Bookmarks**, stored in `state.yaml` beside your notes so they are committed
+  rather than derived. `:IssueHub bookmark` toggles, `:IssueHub bookmarks` opens
+  a picker. A rebuilt index recovers them from `state.yaml`.
+- `state.yaml` also records `last_seen_updated_at`, which is what makes
+  "changed since I last looked" possible in 0.3 without diffing payloads.
+- `util/yaml.lua`: a deliberately minimal YAML subset — scalars, lists, one level
+  of nesting — for reading hand-written metadata.
+
 - **Redmine provider.** `closed` comes from `/issue_statuses.json`, fetched once
   per session and cached, because Redmine's issue payload only carries
   `status.is_closed` on newer versions and status names are per-instance

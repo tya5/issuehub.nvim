@@ -49,6 +49,18 @@ function Json:put(issue)
   self:_flush()
 end
 
+---Bookmarks live in state.yaml (tracked in Git); the index mirrors them so the
+---picker can show and sort by them without reading N files.
+---@param uri string
+---@param value boolean
+function Json:set_bookmark(uri, value)
+  local items = self:_load()
+  if items[uri] then
+    items[uri].bookmarked = value
+    self:_flush()
+  end
+end
+
 ---@param uri string
 function Json:delete(uri)
   local items = self:_load()
@@ -64,6 +76,9 @@ function Json:list(filter)
   for _, item in pairs(self:_load()) do
     local keep = true
     if filter.closed ~= nil and item.closed ~= filter.closed then
+      keep = false
+    end
+    if keep and filter.bookmarked ~= nil and (item.bookmarked == true) ~= filter.bookmarked then
       keep = false
     end
     if keep and filter.provider then
@@ -101,7 +116,9 @@ function Json:rebuild()
   for _, uri in ipairs(repository.cached_uris()) do
     local entry = cache.get(uri)
     if entry and entry.issue then
-      self.items[uri] = issue_mod.to_item(entry.issue)
+      -- Bookmarks are user data in state.yaml, so a rebuilt index must recover
+      -- them rather than silently dropping them.
+      self.items[uri] = issue_mod.to_item(entry.issue, require("issuehub.core.workspace").state(uri).bookmarked)
       count = count + 1
     end
   end

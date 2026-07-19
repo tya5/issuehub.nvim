@@ -10,6 +10,7 @@ local M = {}
 ---@field name string
 ---@field put fun(self, issue: issuehub.Issue)
 ---@field delete fun(self, uri: string)
+---@field set_bookmark fun(self, uri: string, value: boolean)
 ---@field list fun(self, filter: table?): issuehub.ViewItem[]
 ---@field search fun(self, query: string): issuehub.ViewItem[]
 ---@field rebuild fun(self): integer

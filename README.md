@@ -9,12 +9,13 @@ every issue with a local, Git-managed workspace of notes, metadata, and analysis
 
 > **Status: 0.1.0 — early.**
 >
-> **Works today:** four providers — Jira, Redmine, GitHub, GitLab — plus
-> caching, the local index (JSON or SQLite+FTS5), the picker across all four UI
-> backends, local search, and a read-only issue buffer.
+> **Works today:** four providers — Jira, Redmine, GitHub, GitLab — caching, the
+> local index (JSON or SQLite+FTS5), the picker across all four UI backends,
+> local search, bookmarks, and an issue buffer with editable memo / metadata /
+> prompt written back to your Git-managed workspace.
 >
-> **Not yet:** the Workspace overlay — memo / metadata / prompt (0.2) — sync
-> (0.3), collections and export (0.4), and AI backends (0.5).
+> **Not yet:** sync and change detection (0.3), collections and export (0.4),
+> and AI backends (0.5).
 >
 > The public API may break between minor versions until 1.0.
 > See [DESIGN.md](DESIGN.md).
@@ -315,6 +316,8 @@ log file.
 :IssueHub find <text>    " local search across the index
 :IssueHub local          " everything already cached, offline
 :IssueHub refresh        " re-fetch the current issue buffer
+:IssueHub bookmark       " toggle a bookmark on the current issue
+:IssueHub bookmarks      " picker over bookmarked issues
 :IssueHub reindex        " rebuild the index from cache
 :IssueHub provider list
 :IssueHub health
@@ -340,6 +343,59 @@ vim.keymap.set("n", "<leader>jr", "<Plug>(IssueHubRefresh)")
 The fallback guarantees issuehub *functions* with zero plugins. It is not a
 target for feature parity, and browsing issues through it is genuinely worse.
 
+## The issue buffer
+
+Opening an issue gives you one Markdown buffer: the issue on top (read-only,
+from cache) and your own notes below (editable, stored in your workspace).
+
+```markdown
+# PROJ-123  Timeout on cache warmup        <- read-only
+- Status:   In Progress
+- Assignee: tetsuya
+
+## Description                             <- read-only
+Warmup exceeds 30s when the cache is cold.
+
+## Comments (42)                           <- read-only, folded
+
+## Memo                                    <- editable -> memo.md
+Root cause is the cold-cache path.
+- [ ] confirm with staging
+
+## Metadata                                <- editable -> metadata.yaml
+priority: high
+tags:
+  - timeout
+
+## Prompt                                  <- editable -> prompt.md
+Summarise the likely root cause.
+```
+
+`:w` writes the three editable sections to their files — and only the ones whose
+content actually changed, so you do not get empty commits. Emptying a section
+deletes its file rather than leaving a stub.
+
+It is plain Markdown, so Treesitter, folding, `/`, marks, and any markdown
+renderer you already use work unmodified. issuehub implements no editor.
+
+**Read-only is advisory.** Neovim has no way to lock part of a buffer, so edits
+above the `## Memo` heading are *reverted* with a warning rather than prevented.
+Anything you typed in the editable sections is kept.
+
+**metadata.yaml is written back verbatim.** Comments, key order, and spacing
+survive exactly as you typed them — issuehub parses that file for search and
+export, but never reformats it.
+
+### Bookmarks
+
+```vim
+:IssueHub bookmark      " toggle, from inside an issue buffer
+:IssueHub bookmarks     " picker over everything bookmarked
+```
+
+Bookmarks live in `state.yaml` next to your notes, so they are part of what you
+commit, not derived state that a reindex can lose.
+
 ## Workspace layout
 
 Only what belongs in Git lives at the root; everything derived is under
@@ -347,12 +403,14 @@ Only what belongs in Git lives at the root; everything derived is under
 
 ```
 ~/notes/issuehub/
-├── .issuehub/collections/     # tracked
+├── .issuehub/collections/     # tracked                     (0.4)
 ├── .state/                    # NOT tracked: cache, index, locks
 ├── jira/PROJ-123/
-│   ├── memo.md                # 0.2
-│   ├── metadata.yaml          # 0.2
-│   └── analyses/              # 0.5
+│   ├── memo.md                # your notes
+│   ├── metadata.yaml          # free-form key/value
+│   ├── prompt.md              # analysis prompt
+│   ├── state.yaml             # bookmark, last-seen revision
+│   └── analyses/                                            # (0.5)
 └── redmine/12345/
 ```
 

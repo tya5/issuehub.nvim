@@ -64,6 +64,20 @@ local subcommands = {
     require("issuehub.ui.buffer").refresh(uri)
   end,
 
+  bookmark = function()
+    local buffer = require("issuehub.ui.buffer")
+    local uri = buffer.current_uri()
+    if not uri then
+      return vim.notify("issuehub: not in an issue buffer", vim.log.levels.WARN)
+    end
+    local on = require("issuehub.core.workspace").toggle_bookmark(uri)
+    vim.notify(("issuehub: %s %s"):format(on and "bookmarked" or "un-bookmarked", uri))
+  end,
+
+  bookmarks = function()
+    require("issuehub").bookmarks()
+  end,
+
   reindex = function()
     require("issuehub").reindex()
   end,

@@ -176,6 +176,13 @@ function Sqlite:put(issue)
 end
 
 ---@param uri string
+---@param value boolean
+function Sqlite:set_bookmark(uri, value)
+  self:_ensure()
+  self:_exec(("UPDATE issues SET bookmarked = %s WHERE uri = %s;"):format(q(value), q(uri)))
+end
+
+---@param uri string
 function Sqlite:delete(uri)
   self:_ensure()
   self:_exec(("DELETE FROM issues WHERE uri = %s;"):format(q(uri)))
@@ -211,6 +218,9 @@ function Sqlite:list(filter)
   end
   if filter.provider then
     where[#where + 1] = ("provider = %s"):format(q(filter.provider))
+  end
+  if filter.bookmarked ~= nil then
+    where[#where + 1] = ("bookmarked = %s"):format(q(filter.bookmarked))
   end
   local clause = #where > 0 and ("WHERE " .. table.concat(where, " AND ")) or ""
 
@@ -258,6 +268,11 @@ function Sqlite:rebuild()
     local entry = cache.get(uri)
     if entry and entry.issue then
       self:put(entry.issue)
+      -- Bookmarks are user data in state.yaml, so a rebuilt index must recover
+      -- them rather than silently dropping them.
+      if require("issuehub.core.workspace").state(uri).bookmarked then
+        self:set_bookmark(uri, true)
+      end
       count = count + 1
     end
   end

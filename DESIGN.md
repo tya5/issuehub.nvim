@@ -1090,8 +1090,8 @@ release** with a third-party provider proving the interface.
 | ------- | -------- |
 | **0.1** ✅ | config + validation, health, HttpClient, Canonical Issue + minimal Status, Repository skeleton (`.state/`, `.gitignore`, URI→path, case-collision guard), cache incl. partial-result handling, **both index backends incl. FTS5**, Jira provider + ADF, View, picker abstraction + all four adapters, read-only virtual buffer, `find` / `local` / `reindex` |
 | **0.1.1** ✅ | Redmine, GitHub, and GitLab providers; repository-qualified IDs |
-| **0.2** | Workspace + Overlay (memo/metadata/prompt), editable regions, `:w` writeback |
-| **0.3** | sync + change detection + staleness, `state.yaml`, bookmarks |
+| **0.2** ✅ | Workspace + Overlay (memo/metadata/prompt), editable regions, `:w` writeback, bookmarks, `state.yaml` |
+| **0.3** | sync + change detection + staleness, "changed since I last looked" |
 | **0.4** | Collections, Export (all four formats), ripgrep path + `--regex` for `find` |
 | **0.5** | Backend interface, `none` + A2A, Analysis history and staleness |
 | **0.6** | FTS5 indexing of memo / metadata / analysis bodies (the schema columns exist in 0.1 but are populated only with title and description) |

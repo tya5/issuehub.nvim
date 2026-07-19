@@ -118,6 +118,16 @@ function M.local_issues()
   require("issuehub.ui.picker").pick(view, { title = ("local (%d)"):format(#items) })
 end
 
+---Everything bookmarked, across providers.
+function M.bookmarks()
+  local items = require("issuehub.core.index").get():list({ bookmarked = true })
+  if #items == 0 then
+    return vim.notify("issuehub: no bookmarks yet (`:IssueHub bookmark` in an issue buffer)", vim.log.levels.INFO)
+  end
+  local view = require("issuehub.ui.view").new({ source = "bookmarks", label = "bookmarks", items = items })
+  require("issuehub.ui.picker").pick(view, { title = ("bookmarks (%d)"):format(#items) })
+end
+
 ---@return integer count
 function M.reindex()
   local count = require("issuehub.core.index").get():rebuild()
