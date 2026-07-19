@@ -36,7 +36,8 @@ function M.pick(view, opts)
           return {
             value = item,
             display = format.line(item, w),
-            ordinal = ("%s %s %s"):format(item.id, item.status, item.title),
+            -- ordinal is what telescope matches; notes ride along unseen.
+            ordinal = ("%s %s %s %s"):format(item.id, item.status, item.title, item.notes or ""),
           }
         end,
       }),

@@ -8,6 +8,19 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ## [Unreleased]
 
+### Changed
+
+- **`<Plug>(IssueHubFind)` no longer prompts.** It opens the picker immediately
+  and filters as you type, which is the same shape as `<Plug>(IssueHubOpen)` —
+  the two now differ only in corpus, not in interaction. Memo and metadata ride
+  along on each row as hidden match text, so typing a word that appears only in
+  your notes still narrows the list without showing the note. `:IssueHub find
+  {query}` remains the precise form and still reaches analysis history and
+  regexes a picker filter cannot.
+- `issuehub.browse()` is the new no-argument entry point; `find("")` routes to
+  it rather than warning, since "find nothing in particular" is a request to see
+  the corpus.
+
 ### Added
 
 - **Metadata filters for `:IssueHub find`**: `--meta priority=high`,

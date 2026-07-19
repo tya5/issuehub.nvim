@@ -21,9 +21,13 @@ function M.pick(view, opts)
 
   local entries = {}
   for i, item in ipairs(items) do
+    local display = format.line(item, w)
     entries[#entries + 1] = {
       idx = i,
-      text = format.line(item, w),
+      display = display,
+      -- snacks matches `text` and renders whatever `format` returns, so notes
+      -- are searchable without being shown.
+      text = item.notes and item.notes ~= "" and (display .. " " .. item.notes) or display,
       item = item,
       uri = item.uri,
     }
@@ -33,7 +37,7 @@ function M.pick(view, opts)
     title = opts.title or view.label,
     items = entries,
     format = function(entry)
-      return { { entry.text } }
+      return { { entry.display } }
     end,
     -- snacks hands the previewer an object, not a buffer handle: writing to a
     -- bufnr here silently previewed nothing and errored in the preview pane.

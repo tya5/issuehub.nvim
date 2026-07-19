@@ -66,3 +66,30 @@ describe("picker capabilities", function()
     end
   end)
 end)
+
+describe("hidden note text on picker items", function()
+  it("rides along on the item without being displayed", function()
+    local config = require("issuehub.config")
+    config.setup({ workspace = vim.fn.tempname(), index = "json" })
+    require("issuehub.core.index").reset()
+    require("issuehub.core.repository").ensure()
+
+    local overlay = require("issuehub.core.overlay")
+    overlay.write("jira://A", { memo = "認証まわりの調査", metadata = "priority: high" })
+
+    local items = view_mod.with_notes({
+      { uri = "jira://A", id = "A", title = "Timeout", status = "Open", closed = false, updated_at = "" },
+      { uri = "jira://B", id = "B", title = "Other", status = "Open", closed = false, updated_at = "" },
+    })
+
+    -- This is what makes typing in the picker reach your notes.
+    assert.truthy(items[1].notes:find("認証", 1, true))
+    assert.truthy(items[1].notes:find("priority: high", 1, true))
+    assert.equals("", items[2].notes)
+
+    -- The displayed line is unchanged; notes are matched, not shown.
+    local format = require("issuehub.ui.picker.format")
+    local line = format.line(items[1], format.widths(items))
+    assert.is_nil(line:find("認証", 1, true))
+  end)
+end)

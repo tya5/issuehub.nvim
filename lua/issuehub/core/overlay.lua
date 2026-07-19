@@ -98,6 +98,21 @@ function M.metadata(uri)
   return yaml.parse(M.read(uri).metadata)
 end
 
+---The overlay text a picker should match against, as one blob.
+---
+--- Analyses are excluded deliberately: they are long, and matching a picker
+--- query against a page of generated prose produces hits the user cannot see
+--- the reason for. `:IssueHub find` still searches them.
+---@param uri string
+---@return string
+function M.searchable(uri)
+  local overlay = M.read(uri)
+  if overlay.memo == "" and overlay.metadata == "" then
+    return ""
+  end
+  return (overlay.memo .. " " .. overlay.metadata):gsub("%s+", " ")
+end
+
 ---Whether an issue has any overlay content at all.
 ---@param uri string
 ---@return boolean

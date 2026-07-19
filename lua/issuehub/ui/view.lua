@@ -27,6 +27,20 @@ function M.last()
   return last
 end
 
+---Fold each issue's notes into its item as hidden match text.
+---
+--- Pickers match on a text field and display something else, so this is what
+--- lets typing in the picker reach memo and metadata without showing them.
+---@param items issuehub.ViewItem[]
+---@return issuehub.ViewItem[]
+function M.with_notes(items)
+  local overlay = require("issuehub.core.overlay")
+  for _, item in ipairs(items) do
+    item.notes = overlay.searchable(item.uri)
+  end
+  return items
+end
+
 ---@param opts { source: string, label: string, items: issuehub.ViewItem[] }
 ---@return issuehub.View
 function M.new(opts)

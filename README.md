@@ -467,6 +467,23 @@ Anything you typed in the editable sections is kept.
 survive exactly as you typed them — issuehub parses that file for search and
 export, but never reformats it.
 
+### Two pickers, one shape
+
+`<Plug>(IssueHubOpen)` and `<Plug>(IssueHubFind)` behave identically: the picker
+opens straight away and typing filters it. Only the corpus differs.
+
+| | Corpus | Typing filters over |
+| --- | --- | --- |
+| `IssueHubOpen` | the provider's query, fetched now | ID, status, title, and your notes |
+| `IssueHubFind` | everything already local, offline | the same |
+
+Your memo and metadata ride along on each row as hidden match text, so typing
+`認証` finds an issue whose *notes* mention it even though nothing on screen
+does. Nothing is fetched, and no prompt appears.
+
+Use `:IssueHub find <query>` when you want precision instead — it reaches
+analysis history and regexes that a picker filter cannot.
+
 ### Searching your notes
 
 ```vim

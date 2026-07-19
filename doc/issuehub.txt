@@ -174,8 +174,9 @@ pollute the global command namespace.
 :IssueHub search {query}  Provider-side search. The query is passed through
                           untranslated: JQL for Jira, GitHub search
                           qualifiers for GitHub, free text elsewhere.
-:IssueHub find {text}     Local search. Accepts `--regex` to force the
-                          ripgrep engine. See |issuehub-search|.
+:IssueHub find [{text}]   Local search. With no argument, browses everything
+                          local and filters in the picker. Accepts `--regex`
+                          and `--meta`. See |issuehub-find-syntax|.
 :IssueHub local           Everything already cached. Works offline.
 :IssueHub sync [{target}] Re-fetch and report what moved. {target} may be a
                           URI or a provider instance name; omitted means
@@ -316,6 +317,16 @@ Two distinct operations: >
     :IssueHub search    provider-side, online, provider's own query language
     :IssueHub find      local, offline, across cache AND your notes
 <
+                                                        *issuehub-find-shape*
+<Plug>(IssueHubOpen) and <Plug>(IssueHubFind) have the same shape: the picker
+opens immediately and typing filters it. Only the corpus differs — the
+provider's query versus everything already local. In both, your memo and
+metadata ride along on each row as hidden match text, so typing a word that
+appears only in your notes still narrows the list. Neither prompts.
+
+`:IssueHub find {query}` is the precise form, and reaches analysis history and
+regexes that a picker filter cannot.
+
                                                        *issuehub-find-syntax*
 `find` accepts free text, flags, or both: >
     :IssueHub find eviction

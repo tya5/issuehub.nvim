@@ -191,7 +191,27 @@ describe("find engine routing", function()
 end)
 
 describe("empty search", function()
-  it("says so rather than quietly finding nothing", function()
+  it("browses everything instead of erroring", function()
+    -- "find nothing in particular" is a request to see the corpus and filter
+    -- it, which is the same shape as :IssueHub open.
+    config.setup({ workspace = vim.fn.tempname(), index = "json", ui = { picker = "select" } })
+    require("issuehub.core.index").reset()
+    repository.ensure()
+
+    local browsed = false
+    local issuehub = require("issuehub")
+    local original = issuehub.browse
+    issuehub.browse = function()
+      browsed = true
+    end
+    issuehub.find("")
+    issuehub.find("   ")
+    issuehub.browse = original
+
+    assert.is_true(browsed)
+  end)
+
+  it("says so when there is nothing cached to browse", function()
     config.setup({ workspace = vim.fn.tempname(), index = "json" })
     require("issuehub.core.index").reset()
     repository.ensure()
@@ -201,10 +221,9 @@ describe("empty search", function()
     vim.notify = function(msg)
       notified = msg
     end
-    require("issuehub").find("")
-    require("issuehub").find("   ")
+    require("issuehub").browse()
     vim.notify = original
 
-    assert.truthy(notified and notified:find("nothing to search for"))
+    assert.truthy(notified and notified:find("nothing cached yet"))
   end)
 end)

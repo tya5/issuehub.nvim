@@ -118,16 +118,14 @@ end)
 describe("plug mappings", function()
   local source = assert(require("issuehub.util.fs").read("plugin/issuehub.lua"))
 
-  it("never call an API that needs an argument with an empty one", function()
-    -- <Plug>(IssueHubFind) used to call find(""), which searched for an empty
-    -- string and silently found nothing. The mapping must prompt, like the
-    -- subcommand does.
+  it("call a no-argument entry point rather than an empty pattern", function()
+    -- <Plug>(IssueHubFind) once called find(""), which searched for an empty
+    -- string and silently found nothing. It now browses, which is the same UI
+    -- shape as <Plug>(IssueHubOpen) over a different corpus.
     local block = source:match('<Plug>%(IssueHubFind%)".-\n(.-)\nend, {')
     assert.truthy(block, "the Find mapping moved")
-    -- The comment mentions find("") as the thing that went wrong, so match the
-    -- call shape rather than the substring.
-    assert.is_nil(block:match('require%("issuehub"%)%.find%(""%)'))
-    assert.truthy(block:find("ask(", 1, true))
+    assert.is_nil(block:match('%.find%(""%)'))
+    assert.truthy(block:find("browse()", 1, true))
   end)
 
   it("declares every <Plug> mapping the docs promise", function()

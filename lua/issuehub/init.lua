@@ -65,7 +65,9 @@ function M.open(opts)
       return vim.notify("issuehub: " .. lerr, vim.log.levels.ERROR)
     end
     require("issuehub.core.cache").put_all(issues)
-    local view = require("issuehub.ui.view").from_issues(issues, { source = "query", label = name })
+    local view_mod = require("issuehub.ui.view")
+    local view = view_mod.from_issues(issues, { source = "query", label = name })
+    view_mod.with_notes(view:get_items())
     require("issuehub.ui.picker").pick(view, { title = ("%s (%d)"):format(name, #issues) })
   end)
 end
@@ -122,6 +124,22 @@ function M.search_engine(pattern, opts)
   return "ripgrep"
 end
 
+---Browse everything local, filtering live in the picker.
+---
+---The counterpart to |issuehub.open()|: same UI, different corpus. Typing in
+---the picker reaches memo and metadata because those ride along on each item as
+---hidden match text, so this needs no prompt of its own.
+function M.browse()
+  local items = require("issuehub.core.index").get():list()
+  if #items == 0 then
+    return vim.notify("issuehub: nothing cached yet — run `:IssueHub open` first", vim.log.levels.INFO)
+  end
+
+  local view_mod = require("issuehub.ui.view")
+  local view = view_mod.new({ source = "find", label = "local", items = view_mod.with_notes(items) })
+  require("issuehub.ui.picker").pick(view, { title = ("local (%d)"):format(#items) })
+end
+
 ---Local search, with optional metadata filters.
 ---
 ---Accepts either a plain pattern or a parsed query, so `:IssueHub find` and the
@@ -139,8 +157,10 @@ function M.find(input, opts)
     query.regex = true
   end
 
+  -- Nothing specified means "show me everything and let me filter", which is
+  -- the same shape as `:IssueHub open` rather than an error.
   if query.pattern == "" and #query.meta == 0 then
-    return vim.notify("issuehub: nothing to search for", vim.log.levels.WARN)
+    return M.browse()
   end
 
   local search = require("issuehub.core.search")
@@ -181,7 +201,8 @@ function M.find(input, opts)
     return vim.notify("issuehub: no local matches for " .. label, vim.log.levels.INFO)
   end
 
-  local view = require("issuehub.ui.view").new({ source = "find", label = "find: " .. label, items = items })
+  local view_mod = require("issuehub.ui.view")
+  local view = view_mod.new({ source = "find", label = "find: " .. label, items = view_mod.with_notes(items) })
   require("issuehub.ui.picker").pick(view, { title = ("find (%d)"):format(#items) })
 end
 
@@ -317,8 +338,9 @@ end
 
 ---Everything currently in the local index.
 function M.local_issues()
-  local items = require("issuehub.core.index").get():list({ closed = false })
-  local view = require("issuehub.ui.view").new({ source = "query", label = "local", items = items })
+  local view_mod = require("issuehub.ui.view")
+  local items = view_mod.with_notes(require("issuehub.core.index").get():list({ closed = false }))
+  local view = view_mod.new({ source = "query", label = "local", items = items })
   require("issuehub.ui.picker").pick(view, { title = ("local (%d)"):format(#items) })
 end
 

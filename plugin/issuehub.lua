@@ -52,13 +52,10 @@ local subcommands = {
   end,
 
   find = function(args)
-    local query = require("issuehub.core.query").parse(args)
-    if query.pattern == "" and #query.meta == 0 then
-      return ask("Find: ", function(value)
-        require("issuehub").find(value)
-      end)
-    end
-    require("issuehub").find(query)
+    -- With no arguments this browses everything and lets the picker filter,
+    -- matching `:IssueHub open`'s shape. With arguments it runs the precise
+    -- search, which can reach analyses and regexes the picker cannot.
+    require("issuehub").find(require("issuehub.core.query").parse(args))
   end,
 
   ["local"] = function()
@@ -195,13 +192,11 @@ vim.keymap.set("n", "<Plug>(IssueHubOpen)", function()
 end, { desc = "issuehub: open picker" })
 
 vim.keymap.set("n", "<Plug>(IssueHubFind)", function()
-  -- Prompts, exactly like `:IssueHub find` with no argument. Calling find("")
-  -- here searched for an empty string and silently found nothing. The prompt
-  -- accepts the same syntax as the command, flags included.
-  ask("Find: ", function(value)
-    require("issuehub").find(value)
-  end)
-end, { desc = "issuehub: local search" })
+  -- Opens the picker straight away and filters as you type, the same shape as
+  -- <Plug>(IssueHubOpen). Only the corpus differs: local issues including your
+  -- notes, rather than the provider's query.
+  require("issuehub").browse()
+end, { desc = "issuehub: browse local issues" })
 
 vim.keymap.set("n", "<Plug>(IssueHubRefresh)", function()
   local uri = require("issuehub.ui.buffer").current_uri()
