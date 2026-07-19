@@ -114,3 +114,26 @@ describe("help file", function()
     assert.same({}, missing)
   end)
 end)
+
+describe("plug mappings", function()
+  local source = assert(require("issuehub.util.fs").read("plugin/issuehub.lua"))
+
+  it("never call an API that needs an argument with an empty one", function()
+    -- <Plug>(IssueHubFind) used to call find(""), which searched for an empty
+    -- string and silently found nothing. The mapping must prompt, like the
+    -- subcommand does.
+    local block = source:match('<Plug>%(IssueHubFind%)".-\n(.-)\nend, {')
+    assert.truthy(block, "the Find mapping moved")
+    -- The comment mentions find("") as the thing that went wrong, so match the
+    -- call shape rather than the substring.
+    assert.is_nil(block:match('require%("issuehub"%)%.find%(""%)'))
+    assert.truthy(block:find("ask(", 1, true))
+  end)
+
+  it("declares every <Plug> mapping the docs promise", function()
+    local doc = assert(require("issuehub.util.fs").read("doc/issuehub.txt"))
+    for name in doc:gmatch("<Plug>%((IssueHub%a+)%)") do
+      assert.truthy(source:find("<Plug>(" .. name .. ")", 1, true), name .. " is documented but not defined")
+    end
+  end)
+end)

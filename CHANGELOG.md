@@ -10,6 +10,11 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ### Fixed
 
+- **`<Plug>(IssueHubFind)` never prompted.** It called `find("")` directly, so
+  pressing the mapping searched for an empty string and found nothing, no matter
+  what you typed afterwards. The subcommand prompted correctly, so the two entry
+  points had silently diverged; they now share one `ask()` helper, `find()`
+  refuses an empty pattern out loud, and a spec pins the mapping's shape.
 - **Japanese (and any space-less script) was silently unsearchable.** FTS5's
   `unicode61` tokenizer splits on whitespace, so `認証まわりの調査メモ` was
   indexed as one token and searching `認証` returned nothing — no error, just an

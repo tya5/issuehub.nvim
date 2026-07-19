@@ -189,3 +189,22 @@ describe("find engine routing", function()
     assert.equals("ripgrep", issuehub.search_engine("eviction"))
   end)
 end)
+
+describe("empty search", function()
+  it("says so rather than quietly finding nothing", function()
+    config.setup({ workspace = vim.fn.tempname(), index = "json" })
+    require("issuehub.core.index").reset()
+    repository.ensure()
+
+    local notified
+    local original = vim.notify
+    vim.notify = function(msg)
+      notified = msg
+    end
+    require("issuehub").find("")
+    require("issuehub").find("   ")
+    vim.notify = original
+
+    assert.truthy(notified and notified:find("nothing to search for"))
+  end)
+end)

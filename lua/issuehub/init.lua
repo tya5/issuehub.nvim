@@ -127,6 +127,11 @@ end
 ---@param opts { regex: boolean? }?
 function M.find(pattern, opts)
   opts = opts or {}
+
+  if not pattern or vim.trim(pattern) == "" then
+    return vim.notify("issuehub: nothing to search for", vim.log.levels.WARN)
+  end
+
   local search = require("issuehub.core.search")
   local index = require("issuehub.core.index").get()
 

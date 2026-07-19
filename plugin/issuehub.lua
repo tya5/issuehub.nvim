@@ -18,6 +18,19 @@ end
 -- user who never calls setup() (§1.4).
 require("issuehub.ui.highlight").setup()
 
+---Ask for a value, then run `fn`. Shared by the subcommands and the <Plug>
+---mappings: having the mapping call the API directly is what let it drift into
+---searching for an empty string.
+---@param prompt string
+---@param fn fun(value: string)
+local function ask(prompt, fn)
+  vim.ui.input({ prompt = prompt }, function(value)
+    if value and vim.trim(value) ~= "" then
+      fn(value)
+    end
+  end)
+end
+
 ---@type table<string, fun(args: string[])>
 local subcommands = {
   open = function(args)
@@ -31,10 +44,8 @@ local subcommands = {
   search = function(args)
     local query = table.concat(args, " ")
     if query == "" then
-      return vim.ui.input({ prompt = "Query: " }, function(value)
-        if value and value ~= "" then
-          require("issuehub").search(value)
-        end
+      return ask("Query: ", function(value)
+        require("issuehub").search(value)
       end)
     end
     require("issuehub").search(query)
@@ -52,10 +63,8 @@ local subcommands = {
 
     local pattern = table.concat(args, " ")
     if pattern == "" then
-      return vim.ui.input({ prompt = "Find: " }, function(value)
-        if value and value ~= "" then
-          require("issuehub").find(value, { regex = regex })
-        end
+      return ask("Find: ", function(value)
+        require("issuehub").find(value, { regex = regex })
       end)
     end
     require("issuehub").find(pattern, { regex = regex })
@@ -195,7 +204,11 @@ vim.keymap.set("n", "<Plug>(IssueHubOpen)", function()
 end, { desc = "issuehub: open picker" })
 
 vim.keymap.set("n", "<Plug>(IssueHubFind)", function()
-  require("issuehub").find("")
+  -- Prompts, exactly like `:IssueHub find` with no argument. Calling find("")
+  -- here searched for an empty string and silently found nothing.
+  ask("Find: ", function(value)
+    require("issuehub").find(value)
+  end)
 end, { desc = "issuehub: local search" })
 
 vim.keymap.set("n", "<Plug>(IssueHubRefresh)", function()
