@@ -536,6 +536,12 @@ function M.changed()
   require("issuehub.ui.picker").pick(view, { title = ("changed (%d)"):format(#items) })
 end
 
+---Open the conversation window: analysis history plus the next prompt.
+---@param uri string?
+function M.conversation(uri)
+  require("issuehub.ui.conversation").open(uri or require("issuehub.ui.buffer").current_uri(), { focus = true })
+end
+
 ---Analyse an issue through the configured Backend and save the result.
 ---@param uri string?
 ---@param opts { prompt: string?, selection: string?, include_history: boolean? }?
@@ -579,7 +585,9 @@ function M.analyze(uri, opts)
     end
 
     vim.notify(("issuehub: analysis saved (%s)"):format(stamp))
-    require("issuehub.ui.analysis").open(uri, stamp)
+    -- The answer belongs in the conversation, next to the prompt that produced
+    -- it, rather than in a window of its own.
+    require("issuehub.ui.conversation").open(uri, { focus = true })
   end)
 end
 

@@ -74,6 +74,10 @@ local subcommands = {
     require("issuehub").analyze(args[1])
   end,
 
+  prompt = function(args)
+    require("issuehub").conversation(args[1])
+  end,
+
   analyses = function(args)
     require("issuehub").analyses(args[1])
   end,
@@ -227,6 +231,10 @@ vim.keymap.set("n", "<Plug>(IssueHubFind)", function()
   -- notes, rather than the provider's query.
   require("issuehub").browse()
 end, { desc = "issuehub: browse local issues" })
+
+vim.keymap.set("n", "<Plug>(IssueHubPrompt)", function()
+  require("issuehub").conversation()
+end, { desc = "issuehub: conversation window" })
 
 vim.keymap.set("n", "<Plug>(IssueHubRefresh)", function()
   local uri = require("issuehub.ui.buffer").current_uri()

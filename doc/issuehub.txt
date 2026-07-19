@@ -200,6 +200,8 @@ pollute the global command namespace.
                           yaml. {source} is a collection name or one of
                           `local`, `all`, `bookmarks`, `changed`; omitted
                           means the view you were last looking at.
+:IssueHub prompt [{uri}]  Open the conversation window: analysis history and
+                          the next prompt. See |issuehub-conversation|.
 :IssueHub analyze [{uri}] Analyse through the configured backend.
 :IssueHub analyses [{uri}]
                           Browse an issue's analysis history.
@@ -213,6 +215,7 @@ pollute the global command namespace.
 No keymaps are created. These <Plug> mappings are exposed: >lua
     vim.keymap.set("n", "<leader>ji", "<Plug>(IssueHubOpen)")
     vim.keymap.set("n", "<leader>jf", "<Plug>(IssueHubFind)")
+    vim.keymap.set("n", "<leader>jp", "<Plug>(IssueHubPrompt)")
     vim.keymap.set("n", "<leader>jr", "<Plug>(IssueHubRefresh)")
 <
 In an issue buffer, `gx` opens the issue in your browser via |vim.ui.open()|.
@@ -231,10 +234,25 @@ notes (editable, from the workspace): >
     ## Description                             <- read-only
     ## Comments (42)                           <- read-only, foldable
 
-    ## Memo                                    <- editable -> memo.md
-    ## Metadata                                <- editable -> metadata.yaml
-    ## Prompt                                  <- editable -> prompt.md
+    ─────────────────── your workspace below
+    ## Memo                       editable -> memo.md
+    ## Metadata                   editable -> metadata.yaml
 <
+Read-only and editable regions are labelled at the end of their headings, and
+a divider marks where the issue ends and your workspace begins. Editing above
+that line is reverted (|issuehub-buffer-readonly|), so the boundary is worth
+seeing rather than learning by surprise.
+
+                                                   *issuehub-conversation*
+The prompt is NOT in this buffer. `:IssueHub prompt` opens a window on the
+right holding the conversation for this issue: every past prompt and response,
+oldest first, with the next prompt at the bottom. `:w` there writes
+`prompt.md`; `:IssueHub analyze` runs it and the answer appears in the same
+window.
+
+A prompt is one turn of a conversation, and you write the next one by reading
+the previous answers — which is awkward when the prompt sits between memo and
+metadata and the answers live somewhere else.
 |:write| writes the three editable sections, and only the files whose content
 actually changed — so `:w` on an unmodified buffer produces no Git churn.
 Emptying a section deletes its file rather than leaving a stub.

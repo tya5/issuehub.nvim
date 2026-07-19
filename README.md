@@ -493,27 +493,27 @@ Opening an issue gives you one Markdown buffer: the issue on top (read-only,
 from cache) and your own notes below (editable, stored in your workspace).
 
 ```markdown
-# PROJ-123  Timeout on cache warmup        <- read-only
+# PROJ-123  Timeout on cache warmup
 - Status:   In Progress
-- Assignee: tetsuya
+- Analysis: 2026-07-19T11-17-00Z (outdated)
 
-## Description                             <- read-only
+## Description                                    read-only
 Warmup exceeds 30s when the cache is cold.
 
-## Comments (42)                           <- read-only, folded
+## Comments (42)                                  read-only
 
-## Memo                                    <- editable -> memo.md
+────────────────────────────── your workspace below
+## Memo                                editable → memo.md
 Root cause is the cold-cache path.
 - [ ] confirm with staging
 
-## Metadata                                <- editable -> metadata.yaml
+## Metadata                       editable → metadata.yaml
 priority: high
-tags:
-  - timeout
-
-## Prompt                                  <- editable -> prompt.md
-Summarise the likely root cause.
 ```
+
+The labels on the right and the divider are virtual text — they are markers, not
+part of the file. Editing above the divider is reverted, so it is worth seeing
+the boundary rather than discovering it.
 
 `:w` writes the three editable sections to their files — and only the ones whose
 content actually changed, so you do not get empty commits. Emptying a section
@@ -697,6 +697,34 @@ Two different questions are answered separately:
 Sync targets everything cached **plus anything with local notes**, so an issue
 you annotated months ago is still tracked even if it fell out of the cache.
 
+### The conversation window
+
+```vim
+:IssueHub prompt        " opens a window on the right
+```
+
+The prompt is **not** in the issue buffer. It lives in a side window with the
+whole conversation for that issue — every past prompt and response, oldest
+first, with the next prompt at the bottom:
+
+```markdown
+# Conversation — jira://PROJ-123
+
+### 2026-07-19T11:17:00Z  ·  claude-opus-4-8  ·  OUTDATED
+
+> What is the root cause?
+
+The connection pool saturates before the cache fills.
+
+────────────────────────────── next turn
+## Prompt              editable → prompt.md
+```
+
+`:w` writes `prompt.md`, `:IssueHub analyze` runs it, and the answer appears in
+the same window. A prompt is one turn of a conversation and you write the next
+one by reading the previous answers — which is awkward when the prompt sits
+between memo and metadata and the answers live somewhere else entirely.
+
 ### Bookmarks
 
 ```vim
@@ -797,7 +825,7 @@ Only what belongs in Git lives at the root; everything derived is under
 ├── jira/PROJ-123/
 │   ├── memo.md                # your notes
 │   ├── metadata.yaml          # free-form key/value
-│   ├── prompt.md              # analysis prompt
+│   ├── prompt.md              # the next prompt (conversation window)
 │   ├── state.yaml             # bookmark, last-seen revision
 │   └── analyses/
 │       └── 2026-07-19T11-17-00Z/  # prompt.md, response.md, metadata.yaml

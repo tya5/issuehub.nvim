@@ -130,6 +130,60 @@ local function render_opts(uri)
   }
 end
 
+---What each section is, shown at the end of its heading.
+---
+--- Read-only and editable regions rendered identically, which is a poor way to
+--- learn the difference — the first feedback was an edit being reverted.
+local SECTION_LABEL = {
+  description = { text = "read-only", hl = "IssueHubReadOnly" },
+  comments = { text = "read-only", hl = "IssueHubReadOnly" },
+  memo = { text = "editable → memo.md", hl = "IssueHubEditable" },
+  metadata = { text = "editable → metadata.yaml", hl = "IssueHubEditable" },
+}
+
+---@param buf integer
+---@param result issuehub.RenderResult
+local function decorate(buf, result)
+  local first_editable = math.huge
+  for name, range in pairs(result.sections) do
+    local label = SECTION_LABEL[name]
+    if label and label.hl == "IssueHubEditable" then
+      first_editable = math.min(first_editable, range.first)
+    end
+  end
+
+  for name, range in pairs(result.sections) do
+    if range.first <= #result.lines and range.last >= range.first then
+      -- right_gravity=false on the start and true on the end, so the marks keep
+      -- bracketing a region as the user types inside it.
+      vim.api.nvim_buf_set_extmark(buf, ns, range.first - 1, 0, {
+        end_row = math.min(range.last, #result.lines) - 1,
+        right_gravity = false,
+        end_right_gravity = true,
+      })
+      vim.b[buf]["issuehub_section_" .. name] = { range.first, range.last }
+
+      local label = SECTION_LABEL[name]
+      if label then
+        vim.api.nvim_buf_set_extmark(buf, ns, range.first - 1, 0, {
+          virt_text = { { "  " .. label.text, label.hl } },
+          virt_text_pos = "eol",
+          hl_mode = "combine",
+        })
+      end
+    end
+  end
+
+  -- One divider where the issue ends and your workspace begins, so the boundary
+  -- is visible without reading the labels.
+  if first_editable < math.huge and first_editable <= #result.lines then
+    vim.api.nvim_buf_set_extmark(buf, ns, first_editable - 1, 0, {
+      virt_lines_above = true,
+      virt_lines = { { { ("─"):rep(30) .. " your workspace below ", "IssueHubDivider" } } },
+    })
+  end
+end
+
 ---@param buf integer
 ---@param result issuehub.RenderResult
 ---@param uri string
@@ -146,18 +200,7 @@ local function paint(buf, result, uri)
   end
 
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-  for name, range in pairs(result.sections) do
-    if range.first <= #result.lines and range.last >= range.first then
-      -- right_gravity=false on the start and true on the end, so the marks keep
-      -- bracketing a region as the user types inside it.
-      vim.api.nvim_buf_set_extmark(buf, ns, range.first - 1, 0, {
-        end_row = math.min(range.last, #result.lines) - 1,
-        right_gravity = false,
-        end_right_gravity = true,
-      })
-      vim.b[buf]["issuehub_section_" .. name] = { range.first, range.last }
-    end
-  end
+  decorate(buf, result)
 
   tracked[buf] = tracked[buf] or {}
   tracked[buf].uri = uri
@@ -367,6 +410,13 @@ function M.repaint(uri)
   if pending then
     vim.bo[buf].modified = true
   end
+end
+
+---Open the conversation window beside the current issue.
+---@param uri string?
+---@param opts table?
+function M.conversation(uri, opts)
+  require("issuehub.ui.conversation").open(uri or M.current_uri(), opts)
 end
 
 ---@return string? uri

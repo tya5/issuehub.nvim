@@ -51,6 +51,21 @@ Sized for trackers with tens of thousands of tickets:
 
 ### Changed
 
+- **Read-only and editable regions are now visually distinct.** They rendered
+  identically, which is a poor way to learn the difference — the first feedback
+  was an edit being silently reverted. Each section heading carries a virtual
+  label (`read-only`, `editable → memo.md`) and a divider marks where the issue
+  ends and your workspace begins. Both are virtual text, so nothing is added to
+  the file.
+- **The prompt moved out of the issue buffer into a conversation window**
+  (`:IssueHub prompt`, `<Plug>(IssueHubPrompt)`). It shows every past prompt and
+  response for that issue, oldest first, with the next prompt at the bottom;
+  `:w` writes `prompt.md` and an analysis lands in the same window. A prompt is
+  one turn of a conversation and you write the next one by reading the previous
+  answers, which the old layout made awkward — the prompt sat between memo and
+  metadata while its answers lived elsewhere. The issue buffer now has two
+  editable sections rather than three.
+
 - **`<Plug>(IssueHubFind)` no longer prompts.** It opens the picker immediately
   and filters as you type, which is the same shape as `<Plug>(IssueHubOpen)` —
   the two now differ only in corpus, not in interaction. Memo and metadata ride

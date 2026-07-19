@@ -9,6 +9,12 @@ local GROUPS = {
   IssueHubLabel = "Type",
   IssueHubMeta = "Comment",
   IssueHubStale = "WarningMsg",
+
+  -- Section markers. Read-only and editable regions looked identical, which is
+  -- a problem when edits to one of them get reverted.
+  IssueHubReadOnly = "Comment",
+  IssueHubEditable = "Special",
+  IssueHubDivider = "Comment",
 }
 
 function M.setup()

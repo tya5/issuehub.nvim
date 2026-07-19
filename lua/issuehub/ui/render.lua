@@ -31,10 +31,12 @@ end
 
 ---Headings that delimit the editable regions. These are sentinels: writeback
 ---re-parses the buffer by locating them, so they must be stable and unique.
+--- Prompt is deliberately absent: it moved to the conversation window
+--- (|issuehub-conversation|), because a prompt is one turn of a conversation and
+--- you write the next one by reading the previous answers.
 M.SECTIONS = {
   { field = "memo", heading = "## Memo" },
   { field = "metadata", heading = "## Metadata" },
-  { field = "prompt", heading = "## Prompt" },
 }
 
 ---@param lines string[]

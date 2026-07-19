@@ -39,14 +39,17 @@ local function index_of(buf, text)
 end
 
 describe("render sections", function()
-  it("locates the three editable regions", function()
+  it("locates the editable regions", function()
     local result = render.issue(
       issue_mod.normalize({ provider = "jira", id = "P-1", status = { id = "1", name = "Open" } }),
       nil,
       { memo = "m", metadata = "k: v", prompt = "p" }
     )
     local ranges = assert(render.parse_sections(result.lines))
-    assert.truthy(ranges.memo and ranges.metadata and ranges.prompt)
+    assert.truthy(ranges.memo and ranges.metadata)
+    -- Prompt lives in the conversation window now, not here.
+    assert.is_nil(ranges.prompt)
+    assert.is_nil(result.lines[1]:find("Prompt"))
     assert.truthy(result.readonly_until < ranges.memo.first)
   end)
 
@@ -59,7 +62,7 @@ describe("render sections", function()
     local content = assert(render.extract(result.lines))
     assert.equals("line one\nline two", content.memo)
     assert.equals("priority: high", content.metadata)
-    assert.equals("", content.prompt)
+    assert.is_nil(content.prompt)
   end)
 
   it("refuses to extract when a heading was destroyed", function()
@@ -210,5 +213,79 @@ describe("issue header indicators", function()
     }))
     local moved = table.concat(vim.api.nvim_buf_get_lines(open(), 0, 12, false), "\n")
     assert.truthy(moved:find("(outdated)", 1, true))
+  end)
+end)
+
+describe("conversation window", function()
+  local conversation = require("issuehub.ui.conversation")
+  local analysis = require("issuehub.core.analysis")
+
+  before_each(fresh)
+
+  it("shows an empty state with the prompt heading", function()
+    local rendered, prompt_line = conversation.render(URI)
+    assert.equals("## Prompt", rendered[prompt_line])
+    assert.truthy(table.concat(rendered, "\n"):find("No analyses yet", 1, true))
+  end)
+
+  it("reads oldest first, so the newest answer sits by the prompt box", function()
+    local fs = require("issuehub.util.fs")
+    for _, stamp in ipairs({ "2026-07-19T10-00-00Z", "2026-07-20T10-00-00Z" }) do
+      local dir = vim.fs.joinpath(analysis.dir(URI), stamp)
+      fs.write(vim.fs.joinpath(dir, "prompt.md"), "ask " .. stamp .. "\n")
+      fs.write(vim.fs.joinpath(dir, "response.md"), "answer " .. stamp .. "\n")
+      fs.write(vim.fs.joinpath(dir, "metadata.yaml"), "created_at: " .. stamp .. "\n")
+    end
+
+    local text = table.concat(conversation.render(URI), "\n")
+    local older = text:find("answer 2026-07-19", 1, true)
+    local newer = text:find("answer 2026-07-20", 1, true)
+    assert.truthy(older and newer and older < newer)
+  end)
+
+  it("marks an outdated answer", function()
+    analysis.save(URI, { prompt = "p", response = "r" })
+    cache.put(issue_mod.normalize({
+      provider = "jira",
+      id = "PROJ-1",
+      status = { id = "1", name = "Open" },
+      updated_at = "2026-07-25T10:00:00Z",
+    }))
+    assert.truthy(table.concat(conversation.render(URI), "\n"):find("OUTDATED", 1, true))
+  end)
+
+  it("round-trips the prompt through the window", function()
+    overlay.write(URI, { prompt = "focus on the retry path" })
+    local buf = conversation.open(URI)
+
+    assert.equals("focus on the retry path", conversation.extract_prompt(buf))
+
+    local at
+    for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+      if line == "## Prompt" then
+        at = i
+      end
+    end
+    vim.api.nvim_buf_set_lines(buf, at + 1, at + 2, false, { "and the cold cache path" })
+
+    assert.is_true(conversation.save(buf))
+    assert.equals("and the cold cache path", overlay.read(URI).prompt)
+  end)
+
+  it("refuses to save if the prompt heading was deleted", function()
+    local buf = conversation.open(URI)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "nothing here" })
+    assert.is_false(conversation.save(buf))
+  end)
+
+  it("opens in a window to the right of the issue", function()
+    buffer.open(URI)
+    local issue_win = vim.api.nvim_get_current_win()
+    conversation.open(URI)
+
+    local windows = vim.api.nvim_list_wins()
+    assert.truthy(#windows >= 2)
+    -- Focus stays on the issue unless asked otherwise.
+    assert.equals(issue_win, vim.api.nvim_get_current_win())
   end)
 end)
