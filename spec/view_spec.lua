@@ -44,3 +44,25 @@ describe("view", function()
     assert.equals("issues", view_mod.new({ label = "***", items = {} }):slug())
   end)
 end)
+
+describe("picker capabilities", function()
+  it("are declared honestly", function()
+    -- A capability the adapter does not implement makes core promise something
+    -- that never appears (§9.2). snacks previews via ctx.preview, telescope via
+    -- a buffer previewer; fzf has none yet and says so.
+    local expectations = {
+      snacks = { preview = true, multi_select = true, actions = true },
+      telescope = { preview = true, multi_select = true, actions = true },
+      fzf = { preview = false, multi_select = true, actions = true },
+      select = { preview = false, multi_select = false, actions = false },
+    }
+
+    for name, expected in pairs(expectations) do
+      local adapter = require("issuehub.ui.picker." .. name)
+      assert.same(expected, adapter.caps)
+      assert.equals(name, adapter.name)
+      assert.equals("function", type(adapter.pick))
+      assert.equals("function", type(adapter.available))
+    end
+  end)
+end)

@@ -35,10 +35,13 @@ function M.pick(view, opts)
     format = function(entry)
       return { { entry.text } }
     end,
-    -- The preview renders the same content as the real buffer, so the two can
-    -- never drift (§9.3).
+    -- snacks hands the previewer an object, not a buffer handle: writing to a
+    -- bufnr here silently previewed nothing and errored in the preview pane.
     preview = function(ctx)
-      require("issuehub.ui.buffer").preview(ctx.item.uri, ctx.buf)
+      ctx.preview:reset()
+      ctx.preview:set_title(ctx.item.item.id or "issue")
+      ctx.preview:set_lines(require("issuehub.ui.buffer").preview_lines(ctx.item.uri))
+      ctx.preview:highlight({ ft = "markdown" })
       return true
     end,
     confirm = function(picker, entry)

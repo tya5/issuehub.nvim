@@ -2,9 +2,14 @@
 local format = require("issuehub.ui.picker.format")
 
 local M = {
-  name = "fzf",
   ---@type issuehub.PickerCaps
-  caps = { preview = true, multi_select = true, actions = true },
+  --- preview is FALSE deliberately: this adapter does not implement one yet.
+  --- Declaring a capability the adapter does not have is exactly what §9.2
+  --- forbids — core would offer a preview that never appears. Implementing a
+  --- fzf-lua previewer means subclassing its builtin previewer; until that is
+  --- written and verified against a real fzf-lua, this stays honest.
+  name = "fzf",
+  caps = { preview = false, multi_select = true, actions = true },
 }
 
 function M.available()

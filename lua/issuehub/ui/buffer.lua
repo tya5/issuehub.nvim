@@ -245,18 +245,27 @@ local function set_vars(buf, issue)
   vim.b[buf].issuehub_url = issue.url
 end
 
----Render an issue into an arbitrary buffer, for picker previews. Uses the same
----renderer as the real buffer, so the two cannot drift (§9.3).
+---Preview content for a URI, as lines.
+---
+--- Uses the same renderer as the real buffer, so preview and buffer cannot
+--- drift (§9.3). Returning lines rather than writing to a buffer is deliberate:
+--- picker previews have incompatible contracts — snacks hands you a preview
+--- object, telescope hands you a bufnr — and only the adapter knows which.
+---@param uri string
+---@return string[]
+function M.preview_lines(uri)
+  local entry = cache.get(uri)
+  if not entry then
+    return { "(not cached — open it once to fetch)" }
+  end
+  return render.issue(entry.issue, entry, overlay_mod.read(uri), render_opts(uri)).lines
+end
+
+---Render a preview into a buffer, for pickers that hand out a bufnr.
 ---@param uri string
 ---@param buf integer
 function M.preview(uri, buf)
-  local entry = cache.get(uri)
-  if not entry then
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "(not cached — open it once to fetch)" })
-    return
-  end
-  local result = render.issue(entry.issue, entry, overlay_mod.read(uri), render_opts(uri))
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, result.lines)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, M.preview_lines(uri))
   vim.bo[buf].filetype = "markdown"
 end
 
