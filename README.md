@@ -21,6 +21,80 @@ every issue with a local, Git-managed workspace of notes, metadata, and analysis
 > The public API may break between minor versions until 1.0.
 > See [DESIGN.md](DESIGN.md).
 
+## Using it
+
+A walkthrough, from nothing to a workspace worth keeping.
+
+**1. Find something to work on.**
+
+```
+<leader>ji          the provider's query, fetched now
+<leader>jf          everything already local, offline
+```
+
+Both open the same picker and filter as you type. `ji` asks the server; `jf`
+asks your machine and also searches what you wrote. Type `status:open`,
+`priority:high`, or any word from your own notes.
+
+**2. Open it.** `<CR>` in the picker. The issue is on top, read-only, labelled
+as such. Below the divider is your workspace.
+
+**3. Write what you learn.**
+
+```vim
+" type under ## Memo, then
+:w
+```
+
+Only the files whose content changed are written, so `:w` on an unmodified
+buffer produces no Git noise. Put structured facts under `## Metadata` as YAML —
+`priority: high`, `tags: [timeout, cache]` — and they become filterable.
+
+**4. Mark it.** `<leader>jm` bookmarks; `<leader>jb` lists bookmarks.
+
+**5. Come back later.**
+
+```vim
+:IssueHub sync           " what moved on the remote?
+<leader>jc               " what moved since I last looked?
+```
+
+Sync reports per issue: `PROJ-123: status Open → In Progress, +2 comments`. It
+never touches your notes.
+
+**6. Find it again**, weeks later, by something only you would remember:
+
+```vim
+:IssueHub find eviction
+:IssueHub find --meta priority=high
+:IssueHub find 認証
+```
+
+**7. Ask a model about it** (optional, off by default):
+
+```
+<leader>jp               conversation window, right side
+:IssueHub analyze        run the prompt at the bottom
+```
+
+Answers accumulate in that window and are stored in the workspace, marked
+`OUTDATED` once the issue moves on.
+
+**8. Commit.** It is your directory:
+
+```sh
+git -C ~/notes/issuehub add -A && git -C ~/notes/issuehub commit -m "PROJ-123 notes"
+```
+
+### A big tracker
+
+```vim
+:IssueHub fetch          " page the whole server into the cache, in background
+:IssueHub fetch status   " progress, or what is cached and how fresh
+```
+
+Then `<leader>jf` works entirely offline over everything you fetched.
+
 ## Why
 
 Issues are a *source*; what you learn while working them is *knowledge*. Trackers

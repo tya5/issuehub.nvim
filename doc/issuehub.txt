@@ -11,6 +11,7 @@ CONTENTS                                                *issuehub-contents*
   2. Requirements ............................. |issuehub-requirements|
   3. Setup .................................... |issuehub-setup|
   4. Configuration ............................ |issuehub-config|
+ 4.1 Typical workflow ........................ |issuehub-usage|
   5. Commands ................................. |issuehub-commands|
   6. Mappings ................................. |issuehub-mappings|
   7. The issue buffer ......................... |issuehub-buffer|
@@ -161,6 +162,42 @@ Tokens are cached in memory for the session only, are passed to curl on stdin
 (never argv, so `ps` cannot see them), and are unconditionally redacted from
 the log file. `:checkhealth` reports whether a credential resolves, never its
 value.
+
+==============================================================================
+4.1 TYPICAL WORKFLOW                                       *issuehub-usage*
+
+From nothing to a workspace worth keeping. The mappings below assume the
+<Plug> maps from |issuehub-mappings| are bound to <leader>j*.
+
+1. FIND SOMETHING. `<leader>ji` asks the server; `<leader>jf` asks your
+   machine and also searches what you wrote. Both open the same picker and filter as
+   you type: `status:open`, `priority:high`, or a word from your own notes.
+
+2. OPEN IT with <CR>. The issue is on top, labelled read-only. Below the
+   divider is your workspace.
+
+3. WRITE WHAT YOU LEARN under `## Memo`, then |:write|. Only changed files are
+   written, so `:w` on an unmodified buffer produces no Git noise. Structured
+   facts go under `## Metadata` as YAML and become filterable.
+
+4. MARK IT: `:IssueHub bookmark`, and `:IssueHub bookmarks` to list them.
+
+5. COME BACK LATER: `:IssueHub sync` reports what moved on the remote, per
+   issue, and never touches your notes. `:IssueHub changed` shows what moved
+   since you last opened it.
+
+6. FIND IT AGAIN by something only you would remember: >
+       :IssueHub find eviction
+       :IssueHub find --meta priority=high
+<
+7. ASK A MODEL, if a backend is configured: `:IssueHub prompt` opens the
+   conversation, `:IssueHub analyze` runs it. |issuehub-conversation|
+
+8. COMMIT. It is your directory: >
+       git -C ~/notes/issuehub add -A && git commit -m "PROJ-123 notes"
+<
+On a large tracker, `:IssueHub fetch` pages the whole server into the cache in
+the background (|issuehub-fetch|); `find` then works entirely offline.
 
 ==============================================================================
 5. COMMANDS                                             *issuehub-commands*
