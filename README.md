@@ -616,10 +616,31 @@ opens straight away and typing filters it. Only the corpus differs.
 | `IssueHubOpen` | that server's query, fetched now | ID, status, title, and your notes |
 | `IssueHubFind` | that server's issues, already local | the same |
 
-**Both are per server.** With more than one configured you are asked which; with
-one, you are not. Nothing loads from the others: mixing trackers in a single
-list makes IDs ambiguous to scan, and a filter term means different things on
-different servers.
+**Both are scoped to a server and a project.** A server usually holds many
+projects, and a list mixing them is as hard to read as one mixing servers. You
+are asked only when there is a choice — one server, or one project, and nothing
+prompts.
+
+```lua
+jira = {
+  url = "https://your-org.atlassian.net",
+  token_env = "JIRA_TOKEN",
+  projects = { "PROJ", "OPS" },   -- offer just these
+  default_project = "PROJ",       -- or skip the prompt entirely
+},
+```
+
+Without either setting, the choices come from the projects actually seen
+locally — so it costs nothing on a fresh workspace and sharpens as you use it.
+`(all projects)` is always offered.
+
+Project is part of every row, so `project:ops` filters in the picker and
+`--meta project=OPS` filters exactly. Export takes `provider/project` as a
+source:
+
+```vim
+:IssueHub export csv jira/PROJ
+```
 
 Your memo and metadata ride along on each row as hidden match text, so typing
 `認証` finds an issue whose *notes* mention it even though nothing on screen

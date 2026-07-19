@@ -23,6 +23,7 @@ PRAGMA journal_mode = WAL;
 CREATE TABLE IF NOT EXISTS issues (
   uri TEXT PRIMARY KEY,
   provider TEXT,
+  project TEXT,
   id TEXT,
   title TEXT,
   status TEXT,
@@ -33,6 +34,7 @@ CREATE TABLE IF NOT EXISTS issues (
   seen_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_issues_open ON issues(closed, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_issues_project ON issues(provider, project);
 ]]
 
 local FTS_SCHEMA = [[
@@ -166,10 +168,11 @@ end
 local function upsert_sql(issue, docs, fts)
   local provider = issue_mod.parse(issue.uri)
   local sql = {
-    "INSERT INTO issues (uri, provider, id, title, status, closed, assignee, updated_at)",
-    ("VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"):format(
+    "INSERT INTO issues (uri, provider, project, id, title, status, closed, assignee, updated_at)",
+    ("VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"):format(
       q(issue.uri),
       q(provider),
+      q(issue.project),
       q(issue.id),
       q(issue.title),
       q(issue.status.name),
@@ -180,6 +183,7 @@ local function upsert_sql(issue, docs, fts)
     "ON CONFLICT(uri) DO UPDATE SET",
     -- seen_at and bookmarked are user data, not payload: never overwritten here.
     "  title=excluded.title, status=excluded.status, closed=excluded.closed,",
+    "  project=excluded.project,",
     "  assignee=excluded.assignee, updated_at=excluded.updated_at;",
   }
 
@@ -257,6 +261,7 @@ local function to_item(row)
   return {
     uri = row.uri,
     id = row.id,
+    project = row.project,
     title = row.title or "",
     status = row.status or "",
     closed = row.closed == 1 or row.closed == true,
@@ -279,6 +284,9 @@ function Sqlite:list(filter)
   end
   if filter.provider then
     where[#where + 1] = ("provider = %s"):format(q(filter.provider))
+  end
+  if filter.project then
+    where[#where + 1] = ("project = %s"):format(q(filter.project))
   end
   if filter.bookmarked ~= nil then
     where[#where + 1] = ("bookmarked = %s"):format(q(filter.bookmarked))
@@ -388,6 +396,30 @@ function Sqlite:search(query)
     ("SELECT * FROM issues WHERE title LIKE %s OR id LIKE %s ORDER BY closed ASC, updated_at DESC;"):format(like, like)
   ) or {}
   return vim.tbl_map(to_item, rows)
+end
+
+---Distinct projects seen, most recently active first.
+---@param provider string?
+---@return string[]
+function Sqlite:projects(provider)
+  self:_ensure()
+
+  local where = { "project IS NOT NULL", "project <> ''" }
+  if provider then
+    where[#where + 1] = ("provider = %s"):format(q(provider))
+  end
+
+  local rows = self:_exec(([[
+    SELECT project, max(updated_at) AS latest FROM issues
+    WHERE %s
+    GROUP BY project ORDER BY latest DESC;
+  ]]):format(table.concat(where, " AND "))) or {}
+
+  local out = {}
+  for _, row in ipairs(rows) do
+    out[#out + 1] = row.project
+  end
+  return out
 end
 
 ---@return integer count

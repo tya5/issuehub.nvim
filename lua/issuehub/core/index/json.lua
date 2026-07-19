@@ -123,6 +123,9 @@ function Json:list(filter)
       local provider = issue_mod.parse(item.uri)
       keep = provider == filter.provider
     end
+    if keep and filter.project then
+      keep = item.project == filter.project
+    end
     if keep then
       out[#out + 1] = item
     end
@@ -144,6 +147,27 @@ function Json:search(query)
     end
   end
   return require("issuehub.core.index").sort(out)
+end
+
+---Distinct projects seen, most recently active first.
+---@param provider string?
+---@return string[]
+function Json:projects(provider)
+  local latest = {}
+  for _, item in ipairs(self:list({ provider = provider })) do
+    if item.project and item.project ~= "" then
+      local seen = latest[item.project]
+      if not seen or (item.updated_at or "") > seen then
+        latest[item.project] = item.updated_at or ""
+      end
+    end
+  end
+
+  local names = vim.tbl_keys(latest)
+  table.sort(names, function(a, b)
+    return latest[a] > latest[b]
+  end)
+  return names
 end
 
 ---@return integer count

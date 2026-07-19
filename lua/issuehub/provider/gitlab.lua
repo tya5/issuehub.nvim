@@ -75,6 +75,7 @@ function GitLab:_to_issue(raw)
 
   return issue_mod.normalize({
     provider = self.name,
+    project = project,
     id = ("%s#%s"):format(project, raw.iid),
     title = raw.title or "",
     description = raw.description or "", -- already Markdown

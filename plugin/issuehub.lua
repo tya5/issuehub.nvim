@@ -59,7 +59,7 @@ local subcommands = {
   end,
 
   ["local"] = function(args)
-    require("issuehub").local_issues(args[1])
+    require("issuehub").local_issues(args[1], args[2])
   end,
 
   refresh = function()

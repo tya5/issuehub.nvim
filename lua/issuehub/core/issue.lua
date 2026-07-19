@@ -97,6 +97,9 @@ function M.normalize(issue)
   return {
     uri = issue.uri or M.uri(issue.provider, issue.id),
     provider = issue.provider,
+    -- Providers supply this; there is no cross-tracker way to infer it, and
+    -- guessing from the id would be wrong for at least one of them.
+    project = issue.project,
     id = tostring(issue.id),
     title = issue.title or "",
     description = issue.description or "",
@@ -123,6 +126,7 @@ function M.to_item(issue, bookmarked)
   return {
     uri = issue.uri,
     id = issue.id,
+    project = issue.project,
     title = issue.title,
     status = issue.status.name,
     closed = issue.status.closed,

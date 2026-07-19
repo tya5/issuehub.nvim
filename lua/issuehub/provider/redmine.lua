@@ -109,6 +109,8 @@ function Redmine:_to_issue(raw)
 
   return issue_mod.normalize({
     provider = self.name,
+    -- Redmine ids carry no project, so it has to come from the payload.
+    project = (raw.project or {}).identifier or (raw.project or {}).name,
     id = tostring(raw.id),
     title = raw.subject or "",
     -- Redmine bodies are Textile or Markdown depending on an instance setting.

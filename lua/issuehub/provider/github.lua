@@ -113,6 +113,8 @@ function GitHub:_to_issue(raw)
 
   return issue_mod.normalize({
     provider = self.name,
+    -- A repository is GitHub's project.
+    project = repo,
     id = ("%s#%s"):format(repo, raw.number),
     title = raw.title or "",
     description = raw.body or "", -- already Markdown

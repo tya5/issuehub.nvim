@@ -15,6 +15,7 @@ local M = {}
 ---@field set_bookmark fun(self, uri: string, value: boolean)
 ---@field set_seen fun(self, uri: string, updated_at: string?)
 ---@field list fun(self, filter: table?): issuehub.ViewItem[]
+---@field projects fun(self, provider: string?): string[]
 ---@field search fun(self, query: string): issuehub.ViewItem[]
 ---@field rebuild fun(self): integer
 ---@field health fun(self): boolean, string

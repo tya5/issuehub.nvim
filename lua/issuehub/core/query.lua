@@ -136,6 +136,7 @@ local function builtin_fields(uri, item)
   local state = require("issuehub.core.workspace").state(uri)
 
   return {
+    project = (issue and issue.project) or (item and item.project),
     status = issue and issue.status.name or (item and item.status),
     state = (issue and issue.status.closed or (item and item.closed)) and "closed" or "open",
     assignee = issue and issue.assignee or (item and item.assignee),

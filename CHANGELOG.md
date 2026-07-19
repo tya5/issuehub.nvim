@@ -10,6 +10,16 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ### Added
 
+- **Project scoping.** A server holds many projects, and scoping only to the
+  server left lists as mixed as they were before. `project` is now part of the
+  canonical Issue — the Jira project key, the Redmine identifier, the GitHub or
+  GitLab repository — carried through the index, the picker tokens
+  (`project:ops`), `--meta project=`, and export sources (`jira/PROJ`).
+  `providers.<name>.projects` lists the choices and `default_project` skips the
+  prompt; without either, the choices come from what has actually been seen
+  locally, so a fresh workspace costs nothing and sharpens as you use it. You
+  are asked only where there is a choice, and `(all projects)` stays offered.
+
 - **Collections carry a prompt and an analysis history**, like issues do. Paths
   now resolve a *subject* — an issue URI or `collection:<slug>` — so overlay,
   analysis, and state work on both. A collection is stored as a directory

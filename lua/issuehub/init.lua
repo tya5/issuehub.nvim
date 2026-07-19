@@ -33,28 +33,77 @@ function M.setup(opts)
   end
 end
 
----Resolve which server an operation applies to.
+---Resolve which server, and then which project, an operation applies to.
 ---
----Every per-server entry point goes through here, so they cannot drift into
----asking differently — or, worse, into one of them quietly picking the first.
----@param name string?              Explicit choice; skips the prompt.
----@param prompt string
----@param cb fun(provider_name: string)
-function M.with_provider(name, prompt, cb)
+---A server usually holds many projects, and a list mixing them is as hard to
+---read as one mixing servers. Every scoped entry point goes through here, so
+---they cannot drift into asking differently.
+---
+---Projects come from `providers.<name>.projects` when you have listed them, and
+---otherwise from what has actually been seen locally — so it costs nothing on a
+---fresh workspace and sharpens as you use it. "All projects" stays offered,
+---because sometimes that is the question.
+---@param opts { provider: string?, project: string?, prompt: string?, all_projects: boolean? }
+---@param cb fun(provider: string, project: string?)
+function M.with_scope(opts, cb)
+  opts = opts or {}
   local names = require("issuehub.provider").configured_names()
   if #names == 0 then
     return vim.notify("issuehub: no providers configured", vim.log.levels.ERROR)
   end
-  if name then
-    return cb(name)
+
+  local function choose_project(provider)
+    if opts.all_projects then
+      return cb(provider, nil)
+    end
+    if opts.project and opts.project ~= "" then
+      return cb(provider, opts.project)
+    end
+
+    local settings = require("issuehub.config").get().providers[provider] or {}
+    if settings.default_project then
+      return cb(provider, settings.default_project)
+    end
+
+    local projects = settings.projects
+    if not projects or #projects == 0 then
+      projects = require("issuehub.core.index").get():projects(provider)
+    end
+
+    -- Nothing to choose between: one project, or none seen yet.
+    if #projects <= 1 then
+      return cb(provider, projects[1])
+    end
+
+    local choices = vim.list_extend({ "(all projects)" }, projects)
+    vim.ui.select(choices, { prompt = (opts.prompt or "Project") .. " — " .. provider }, function(chosen)
+      if chosen then
+        cb(provider, chosen ~= "(all projects)" and chosen or nil)
+      end
+    end)
+  end
+
+  if opts.provider then
+    return choose_project(opts.provider)
   end
   if #names == 1 then
-    return cb(names[1])
+    return choose_project(names[1])
   end
-  vim.ui.select(names, { prompt = prompt }, function(chosen)
+  vim.ui.select(names, { prompt = opts.prompt or "Server" }, function(chosen)
     if chosen then
-      cb(chosen)
+      choose_project(chosen)
     end
+  end)
+end
+
+---Server only, without a project prompt. For operations that are inherently
+---whole-server, like fetching everything.
+---@param name string?
+---@param prompt string
+---@param cb fun(provider_name: string)
+function M.with_provider(name, prompt, cb)
+  M.with_scope({ provider = name, prompt = prompt, all_projects = true }, function(provider)
+    cb(provider)
   end)
 end
 
@@ -222,22 +271,25 @@ end
 ---the picker reaches memo and metadata because those ride along on each item as
 ---hidden match text, so this needs no prompt of its own.
 ---@param provider_name string?
-function M.browse(provider_name)
-  M.with_provider(provider_name, "Browse local issues from", function(name)
-    -- Scoped to one server, like `open`. Nothing is loaded from the others:
-    -- mixing trackers in one list makes the ids ambiguous to scan and the
-    -- filter terms mean different things per server.
-    local items = require("issuehub.core.index").get():list({ provider = name })
+---@param provider_name string?
+---@param project string?
+function M.browse(provider_name, project)
+  M.with_scope({ provider = provider_name, project = project, prompt = "Browse" }, function(name, chosen)
+    -- Scoped to one server and, where there is more than one, to one project.
+    -- A list mixing projects is as hard to read as one mixing servers.
+    local items = require("issuehub.core.index").get():list({ provider = name, project = chosen })
+    local label = chosen and ("%s / %s"):format(name, chosen) or name
+
     if #items == 0 then
       return vim.notify(
-        ("issuehub: nothing cached for %s yet — `:IssueHub open` or `:IssueHub fetch` first"):format(name),
+        ("issuehub: nothing cached for %s yet — `:IssueHub open` or `:IssueHub fetch` first"):format(label),
         vim.log.levels.INFO
       )
     end
 
     local view_mod = require("issuehub.ui.view")
-    local view = view_mod.new({ source = "find", label = name, items = view_mod.with_notes(items) })
-    require("issuehub.ui.picker").pick(view, { title = ("%s local (%d)"):format(name, #items) })
+    local view = view_mod.new({ source = "find", label = label, items = view_mod.with_notes(items) })
+    require("issuehub.ui.picker").pick(view, { title = ("%s (%d)"):format(label, #items) })
   end)
 end
 
@@ -314,14 +366,15 @@ end
 --- Exporting either alone silently drops rows, so the union is the honest
 --- default — with blanks where one side has nothing to say.
 ---@param provider_name string?   Scope to one server.
+---@param project string?         Scope further to one project.
 ---@return issuehub.ViewItem[]
-function M.merged_items(provider_name)
+function M.merged_items(provider_name, project)
   local index = require("issuehub.core.index").get()
   local issue_mod = require("issuehub.core.issue")
   local cache = require("issuehub.core.cache")
 
   local items, seen = {}, {}
-  for _, item in ipairs(index:list({ provider = provider_name })) do
+  for _, item in ipairs(index:list({ provider = provider_name, project = project })) do
     seen[item.uri] = true
     items[#items + 1] = item
   end
@@ -330,8 +383,13 @@ function M.merged_items(provider_name)
   for _, uri in ipairs(require("issuehub.core.workspace").with_overlay()) do
     local provider = issue_mod.parse(uri)
     if not seen[uri] and (not provider_name or provider == provider_name) then
-      seen[uri] = true
       local entry = cache.get(uri)
+      -- A project filter can only apply to something with a payload; an issue
+      -- known only by its notes has no project to compare.
+      if project and not (entry and entry.issue and entry.issue.project == project) then
+        goto continue
+      end
+      seen[uri] = true
       if entry and entry.issue then
         items[#items + 1] = issue_mod.to_item(entry.issue)
       else
@@ -348,6 +406,7 @@ function M.merged_items(provider_name)
         }
       end
     end
+    ::continue::
   end
 
   return require("issuehub.core.index").sort(items)
@@ -391,9 +450,11 @@ function M.resolve_view(source)
     return view
   end
 
-  -- A provider instance name exports that server's merged set.
-  if vim.tbl_contains(require("issuehub.provider").configured_names(), source) then
-    return view_mod.new({ source = "query", label = source, items = M.merged_items(source) })
+  -- A provider instance name, or `provider/project`, exports that merged set.
+  local provider, project = source:match("^([^/]+)/(.+)$")
+  provider = provider or source
+  if vim.tbl_contains(require("issuehub.provider").configured_names(), provider) then
+    return view_mod.new({ source = "query", label = source, items = M.merged_items(provider, project) })
   end
 
   return nil, ("unknown source '%s' (a collection, a provider name, or local|all|bookmarks|changed)"):format(source)
@@ -495,12 +556,15 @@ end
 
 ---Everything currently in the local index.
 ---@param provider_name string?
-function M.local_issues(provider_name)
-  M.with_provider(provider_name, "Local issues from", function(name)
+function M.local_issues(provider_name, project)
+  M.with_scope({ provider = provider_name, project = project, prompt = "Local issues" }, function(name, chosen)
     local view_mod = require("issuehub.ui.view")
-    local items = view_mod.with_notes(require("issuehub.core.index").get():list({ closed = false, provider = name }))
-    local view = view_mod.new({ source = "query", label = name, items = items })
-    require("issuehub.ui.picker").pick(view, { title = ("%s local (%d)"):format(name, #items) })
+    local items = view_mod.with_notes(
+      require("issuehub.core.index").get():list({ closed = false, provider = name, project = chosen })
+    )
+    local label = chosen and ("%s / %s"):format(name, chosen) or name
+    local view = view_mod.new({ source = "query", label = label, items = items })
+    require("issuehub.ui.picker").pick(view, { title = ("%s local (%d)"):format(label, #items) })
   end)
 end
 

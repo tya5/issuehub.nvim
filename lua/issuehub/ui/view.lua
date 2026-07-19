@@ -38,9 +38,14 @@ local function builtin_tokens(item)
   local provider = require("issuehub.core.issue").parse(item.uri)
   local tokens = {
     ("status:%s"):format(tostring(item.status or ""):lower():gsub("%s+", "-")),
+  }
+  if item.project and item.project ~= "" then
+    tokens[#tokens + 1] = ("project:%s"):format(tostring(item.project):lower())
+  end
+  vim.list_extend(tokens, {
     ("state:%s"):format(item.closed and "closed" or "open"),
     ("provider:%s"):format(tostring(provider or ""):lower()),
-  }
+  })
   if item.assignee and item.assignee ~= "" then
     tokens[#tokens + 1] = ("assignee:%s"):format(tostring(item.assignee):lower():gsub("%s+", "-"))
   end

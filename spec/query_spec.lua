@@ -200,3 +200,220 @@ describe("built-in fields as filters", function()
     assert.is_false(query.matches_meta(URI, meta("--meta state=closed --meta priority=high")))
   end)
 end)
+
+describe("project scoping", function()
+  local index_mod = require("issuehub.core.index")
+  local cache = require("issuehub.core.cache")
+  local issue_mod = require("issuehub.core.issue")
+
+  local function seed(provider, project, id, updated)
+    cache.put(issue_mod.normalize({
+      provider = provider,
+      project = project,
+      id = id,
+      title = id,
+      status = { id = "1", name = "Open" },
+      updated_at = updated,
+    }))
+  end
+
+  before_each(function()
+    config.setup({
+      workspace = vim.fn.tempname(),
+      index = "json",
+      providers = { jira = { url = "https://x", token_env = "T" } },
+    })
+    index_mod.reset()
+    require("issuehub.core.repository").forget_case_index()
+    require("issuehub.core.repository").ensure()
+
+    seed("jira", "PROJ", "PROJ-1", "2026-07-19T10:00:00Z")
+    seed("jira", "PROJ", "PROJ-2", "2026-07-18T10:00:00Z")
+    seed("jira", "OPS", "OPS-1", "2026-07-20T10:00:00Z")
+  end)
+
+  it("filters the index by project", function()
+    local index = index_mod.get()
+    assert.equals(3, #index:list({ provider = "jira" }))
+    assert.equals(2, #index:list({ provider = "jira", project = "PROJ" }))
+    assert.equals(1, #index:list({ provider = "jira", project = "OPS" }))
+  end)
+
+  it("lists the projects it has seen, most recently active first", function()
+    -- OPS moved most recently, so it leads.
+    assert.same({ "OPS", "PROJ" }, index_mod.get():projects("jira"))
+  end)
+
+  it("filters with --meta project=", function()
+    assert.is_true(query.matches_meta("jira://PROJ-1", query.parse("--meta project=PROJ").meta))
+    assert.is_false(query.matches_meta("jira://OPS-1", query.parse("--meta project=PROJ").meta))
+  end)
+
+  it("puts a project token on picker rows", function()
+    local items = require("issuehub.ui.view").with_notes(index_mod.get():list({ provider = "jira" }))
+    for _, item in ipairs(items) do
+      assert.truthy(item.notes:find("project:" .. item.project:lower(), 1, true))
+    end
+  end)
+
+  it("survives a rebuild", function()
+    local index = index_mod.get()
+    index:rebuild()
+    assert.equals(2, #index:list({ provider = "jira", project = "PROJ" }))
+  end)
+end)
+
+describe("provider project extraction", function()
+  it("takes the Jira project key from the payload", function()
+    local jira = require("issuehub.provider.jira").new("jira")
+    jira:setup({ url = "https://example.atlassian.net" })
+    local issue = jira:_to_issue({ key = "PROJ-123", fields = { project = { key = "PROJ" }, status = {} } })
+    assert.equals("PROJ", issue.project)
+  end)
+
+  it("falls back to the key prefix when the field is absent", function()
+    local jira = require("issuehub.provider.jira").new("jira")
+    jira:setup({ url = "https://example.atlassian.net" })
+    local issue = jira:_to_issue({ key = "PROJ-123", fields = { status = {} } })
+    assert.equals("PROJ", issue.project)
+  end)
+
+  it("uses the repository for GitHub", function()
+    local github = require("issuehub.provider.github").new("github")
+    github:setup({})
+    local issue = github:_to_issue({
+      number = 7,
+      state = "open",
+      repository_url = "https://api.github.com/repos/tya5/issuehub.nvim",
+    })
+    assert.equals("tya5/issuehub.nvim", issue.project)
+    assert.equals("tya5/issuehub.nvim#7", issue.id)
+  end)
+
+  it("uses the project path for GitLab", function()
+    local gitlab = require("issuehub.provider.gitlab").new("gitlab")
+    gitlab:setup({})
+    local issue = gitlab:_to_issue({ iid = 12, references = { full = "group/proj#12" }, state = "opened" })
+    assert.equals("group/proj", issue.project)
+  end)
+
+  it("takes the identifier from the Redmine payload, since ids carry none", function()
+    local redmine = require("issuehub.provider.redmine").new("redmine")
+    redmine:setup({ url = "https://redmine.example.com" })
+    local issue = redmine:_to_issue({ id = 12345, subject = "x", status = {}, project = { identifier = "ops" } })
+    assert.equals("ops", issue.project)
+  end)
+end)
+
+describe("scope resolution", function()
+  local issuehub = require("issuehub")
+
+  local function seed(provider, project, id)
+    require("issuehub.core.cache").put(require("issuehub.core.issue").normalize({
+      provider = provider,
+      project = project,
+      id = id,
+      title = id,
+      status = { id = "1", name = "Open" },
+      updated_at = "2026-07-19T10:00:00Z",
+    }))
+  end
+
+  before_each(function()
+    config.setup({
+      workspace = vim.fn.tempname(),
+      index = "json",
+      providers = { jira = { url = "https://x", token_env = "T" } },
+    })
+    require("issuehub.core.index").reset()
+    require("issuehub.core.repository").forget_case_index()
+    require("issuehub.core.repository").ensure()
+  end)
+
+  it("does not ask when there is only one project", function()
+    seed("jira", "PROJ", "PROJ-1")
+    local asked = false
+    local original = vim.ui.select
+    vim.ui.select = function()
+      asked = true
+    end
+
+    local got
+    issuehub.with_scope({}, function(provider, project)
+      got = { provider, project }
+    end)
+    vim.ui.select = original
+
+    assert.is_false(asked)
+    assert.same({ "jira", "PROJ" }, got)
+  end)
+
+  it("asks once several projects exist, offering all", function()
+    seed("jira", "PROJ", "PROJ-1")
+    seed("jira", "OPS", "OPS-1")
+
+    local offered
+    local original = vim.ui.select
+    vim.ui.select = function(items)
+      offered = items
+    end
+    issuehub.with_scope({}, function() end)
+    vim.ui.select = original
+
+    assert.equals("(all projects)", offered[1])
+    assert.equals(3, #offered)
+  end)
+
+  it("honours a configured project list without touching the index", function()
+    config.setup({
+      workspace = config.get().workspace,
+      index = "json",
+      providers = { jira = { url = "https://x", token_env = "T", projects = { "A", "B" } } },
+    })
+    local offered
+    local original = vim.ui.select
+    vim.ui.select = function(items)
+      offered = items
+    end
+    issuehub.with_scope({}, function() end)
+    vim.ui.select = original
+
+    assert.same({ "(all projects)", "A", "B" }, offered)
+  end)
+
+  it("skips the prompt entirely with default_project", function()
+    seed("jira", "PROJ", "PROJ-1")
+    seed("jira", "OPS", "OPS-1")
+    config.setup({
+      workspace = config.get().workspace,
+      index = "json",
+      providers = { jira = { url = "https://x", token_env = "T", default_project = "OPS" } },
+    })
+
+    local got
+    issuehub.with_scope({}, function(_, project)
+      got = project
+    end)
+    assert.equals("OPS", got)
+  end)
+
+  it("with_provider never asks about projects", function()
+    seed("jira", "PROJ", "PROJ-1")
+    seed("jira", "OPS", "OPS-1")
+
+    local asked = false
+    local original = vim.ui.select
+    vim.ui.select = function()
+      asked = true
+    end
+    local got
+    issuehub.with_provider(nil, "x", function(provider)
+      got = provider
+    end)
+    vim.ui.select = original
+
+    -- Fetching a whole server is inherently whole-server.
+    assert.is_false(asked)
+    assert.equals("jira", got)
+  end)
+end)

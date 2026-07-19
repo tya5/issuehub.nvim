@@ -11,7 +11,7 @@ local M = {}
 local Jira = {}
 Jira.__index = Jira
 
-local FIELDS = "summary,description,status,assignee,reporter,labels,created,updated,resolutiondate"
+local FIELDS = "summary,description,status,assignee,reporter,labels,created,updated,resolutiondate,project"
 
 ---@param name string?  Instance name; also the URI scheme. Defaults to "jira".
 function M.new(name)
@@ -114,6 +114,8 @@ function Jira:_to_issue(raw)
   return issue_mod.normalize({
     uri = issue_mod.uri(self.name, raw.key),
     provider = self.name,
+    -- The project key, which is also the prefix of every issue key in it.
+    project = (f.project or {}).key or raw.key:match("^(.-)%-%d+$"),
     id = raw.key,
     title = f.summary or "",
     -- Cloud returns ADF, Server returns wiki-markup text. adf.to_markdown

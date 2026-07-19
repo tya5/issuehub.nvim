@@ -214,8 +214,8 @@ pollute the global command namespace.
 :IssueHub find [{text}]   Local search. With no argument, browses everything
                           local and filters in the picker. Accepts `--regex`
                           and `--meta`. See |issuehub-find-syntax|.
-:IssueHub local [{provider}]
-                          That server's cached issues. Works offline.
+:IssueHub local [{provider}] [{project}]
+                          Cached issues for that scope. Works offline.
 :IssueHub fetch [{provider}]
                           Walk a server's whole query into the cache, page by
                           page, in the background. Per server: with several
@@ -422,10 +422,24 @@ Two distinct operations: >
 opens immediately and typing filters it. Only the corpus differs — that
 server's query versus its issues you already have locally.
 
-Both are PER SERVER. With more than one configured you are asked which; with
-one you are not. Nothing is loaded from the others: mixing trackers in one
-list makes ids ambiguous to scan, and a filter term mean different things on
-different servers. In both, your memo and
+Both are scoped to A SERVER AND A PROJECT. A server usually holds many
+projects, and a list mixing them is as hard to read as one mixing servers. You
+are asked only where there is a choice.
+
+                                                  *issuehub-projects*
+Project is part of the canonical Issue: the Jira project key, the Redmine
+identifier, the GitHub or GitLab repository. Configure the choices, or let
+them come from what has been seen locally: >lua
+    jira = {
+      url = "https://your-org.atlassian.net",
+      token_env = "JIRA_TOKEN",
+      projects = { "PROJ", "OPS" },   -- offer just these
+      default_project = "PROJ",       -- or skip the prompt entirely
+    }
+<
+`(all projects)` is always offered. `project:ops` filters in the picker,
+`--meta project=OPS` filters exactly, and export takes `provider/project` as a
+source: `:IssueHub export csv jira/PROJ`. In both, your memo and
 metadata ride along on each row as hidden match text, so typing a word that
 appears only in your notes still narrows the list. Neither prompts.
 

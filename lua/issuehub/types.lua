@@ -14,6 +14,8 @@
 ---@class issuehub.Issue
 ---@field uri string
 ---@field provider string
+---@field project string?   The tracker's own grouping: Jira project key,
+---                         Redmine identifier, GitHub/GitLab repository.
 ---@field id string
 ---@field title string
 ---@field description string
@@ -31,6 +33,7 @@
 ---@class issuehub.ViewItem
 ---@field uri string
 ---@field id string
+---@field project string?
 ---@field title string
 ---@field status string      status.name, flattened for display
 ---@field closed boolean     status.closed; the only sortable/filterable semantic
@@ -74,6 +77,8 @@
 ---@field token_cmd string[]?
 ---@field token (fun(): string?)?
 ---@field default_query any?
+---@field projects string[]?   Restrict this instance to these projects.
+---@field default_project string?
 ---@field comment_limit integer?
 ---@field max_results integer?  Results to page through; defaults to one page.
 ---@field per_page integer?     Page size, capped at 100 by every provider.
