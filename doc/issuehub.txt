@@ -170,8 +170,8 @@ From nothing to a workspace worth keeping. The mappings below assume the
 <Plug> maps from |issuehub-mappings| are bound to <leader>j*.
 
 1. FIND SOMETHING. `<leader>ji` asks the server; `<leader>jf` asks your
-   machine and also searches what you wrote. Both open the same picker and filter as
-   you type: `status:open`, `priority:high`, or a word from your own notes.
+   machine and also searches what you wrote. Both open the same picker and
+   filter as you type: `status:open`, `priority:high`, or a word you wrote.
 
 2. OPEN IT with <CR>. The issue is on top, labelled read-only. Below the
    divider is your workspace.
