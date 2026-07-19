@@ -1135,6 +1135,12 @@ release** with a third-party provider proving the interface.
 | **0.6** ✅ | FTS5 indexing of memo / metadata / analysis bodies, with per-column match attribution |
 | **0.7** ✅ | vimdoc reference, extension guide, documented public API surface, release workflow |
 
+All of the above shipped together as **v0.1.0**: nothing was published until the
+whole set was done, so the milestone numbers are development phases rather than
+released versions. Post-release work — corporate networks, multiple instances,
+pagination, background fetch, the conversation window — was driven by using it
+against a real tracker rather than by this table.
+
 Rationale for the ordering: each milestone is independently useful, and the
 riskiest unknowns (auth/HTTP, picker portability) are resolved in 0.1 rather than
 discovered late.

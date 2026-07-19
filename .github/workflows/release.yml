@@ -13,7 +13,23 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Skipped rather than failed when the key is absent: a tag should still
+      # produce a GitHub release for people installing with a plugin manager,
+      # which is most of them.
+      - name: Check for a LuaRocks key
+        id: key
+        env:
+          LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
+        run: |
+          if [ -n "$LUAROCKS_API_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::LUAROCKS_API_KEY is not set; skipping the LuaRocks publish."
+          fi
+
       - name: Publish to LuaRocks
+        if: steps.key.outputs.present == 'true'
         uses: nvim-neorocks/luarocks-tag-release@v7
         env:
           LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
