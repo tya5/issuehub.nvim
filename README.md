@@ -1,5 +1,9 @@
 # issuehub.nvim
 
+[![CI](https://github.com/tya5/issuehub.nvim/actions/workflows/ci.yml/badge.svg)](https://github.com/tya5/issuehub.nvim/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Neovim 0.11+](https://img.shields.io/badge/Neovim-0.11%2B-57A143?logo=neovim&logoColor=white)](https://neovim.io)
+
 An **Issue Workspace** for Neovim: browse issue trackers through one UI, and pair
 every issue with a local, Git-managed workspace of notes, metadata, and analysis.
 
@@ -195,14 +199,24 @@ A provider converts a remote payload to the canonical Issue and nothing else: no
 UI, no workspace access, all I/O async, errors returned rather than thrown. See
 §7 and §16 of [DESIGN.md](DESIGN.md).
 
-## Development
+## Security
+
+issuehub handles API tokens. They never reach argv, a log file, or disk — see
+[SECURITY.md](SECURITY.md) for the specifics and for what the cache *does* store
+in plain text.
+
+## Contributing
+
+Issues and PRs welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and
+[DESIGN.md](DESIGN.md) first — the architecture has a few load-bearing
+constraints (no hard dependencies, no cross-provider workflow enum) that a PR can
+accidentally break.
 
 ```sh
-nvim -l spec/runner.lua   # no toolchain needed
-busted                    # CI: busted + nlua
+nvim -l spec/runner.lua   # run the specs; no toolchain needed
 stylua lua plugin ftplugin spec
 ```
 
 ## License
 
-MIT
+[MIT](LICENSE) © tya5

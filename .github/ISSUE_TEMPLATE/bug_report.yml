@@ -1,0 +1,53 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. issuehub is pre-1.0, so please check
+        [DESIGN.md](../../blob/main/DESIGN.md) §22 first — the behaviour may
+        belong to a milestone that has not shipped yet.
+
+  - type: textarea
+    id: health
+    attributes:
+      label: ":checkhealth issuehub output"
+      description: |
+        This reports your picker and index backends, tool availability, and
+        whether credentials resolve. It never prints a credential, so it is safe
+        to paste.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead.
+    validations:
+      required: true
+
+  - type: input
+    id: provider
+    attributes:
+      label: Provider
+      placeholder: "Jira Cloud / Jira Server 9.x / n/a"
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Your issuehub config
+      description: "With credentials removed — token_env names are fine, values are not."
+      render: lua
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Relevant log output
+      description: |
+        Set `log_level = vim.log.levels.DEBUG`, reproduce, then paste from
+        `:lua vim.print(require("issuehub.util.log").path())`. Tokens are
+        redacted automatically — but please skim it before pasting anyway.
+      render: text

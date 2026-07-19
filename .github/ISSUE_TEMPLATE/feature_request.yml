@@ -1,0 +1,45 @@
+name: Feature request
+description: Suggest a capability or a new provider/backend
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check [DESIGN.md](../../blob/main/DESIGN.md) first — §21 lists
+        deliberate non-goals and §22 lists what is already scheduled.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: The situation, not the solution. This is the part that gets designed against.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What did you have in mind?
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Which layer does this touch?
+      options:
+        - Provider (a new tracker, or an existing one's behaviour)
+        - Workspace / Repository (notes, metadata, on-disk format)
+        - UI (picker, buffer, rendering)
+        - Backend (AI / A2A)
+        - Not sure
+
+  - type: checkboxes
+    id: principles
+    attributes:
+      label: Design fit
+      description: |
+        issuehub deliberately does not implement pickers, git, diff, markdown
+        rendering, or AI, and ships with zero hard dependencies. Requests that
+        require breaking those get declined, so it is worth checking up front.
+      options:
+        - label: This does not require a new hard dependency
+        - label: This does not reimplement something an existing plugin already does
