@@ -23,7 +23,16 @@ Formatting and linting:
 
 ```sh
 stylua lua plugin ftplugin spec
-luacheck lua plugin ftplugin
+luacheck lua plugin ftplugin spec
+```
+
+Both run in CI. If you do not have them installed, luacheck is reachable through
+the same container CI uses — worth doing, since it catches dead code that tests
+never will:
+
+```sh
+docker run --rm --platform linux/amd64 -v "$PWD":/w -w /w \
+  ghcr.io/lunarmodules/luacheck:v1.2.0 lua plugin ftplugin spec --no-color
 ```
 
 ## The rules that actually matter

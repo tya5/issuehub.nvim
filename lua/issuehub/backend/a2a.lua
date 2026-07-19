@@ -39,12 +39,6 @@ function A2A:setup(opts)
   return true
 end
 
----@return table? auth
-local function auth_of(name)
-  local token = config.token and select(1, pcall(config.token, name)) or nil
-  return token
-end
-
 ---@return table
 function A2A:_request_opts()
   local headers = { ["Content-Type"] = "application/json" }

@@ -51,4 +51,4 @@ jobs:
       - name: luacheck
         uses: lunarmodules/luacheck@v1
         with:
-          args: lua plugin ftplugin --no-color
+          args: lua plugin ftplugin spec --no-color

@@ -168,6 +168,7 @@ describe("analysis", function()
   it("prefers the workspace prompt over the default", function()
     local prompt, source = analysis.prompt_for(URI)
     assert.equals("default", source)
+    assert.truthy(prompt:find("root cause", 1, true))
 
     overlay.write(URI, { prompt = "focus on the retry path" })
     prompt, source = analysis.prompt_for(URI)
