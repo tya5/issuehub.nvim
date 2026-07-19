@@ -25,6 +25,7 @@
 ---@field comments issuehub.Comment[]
 ---@field created_at string
 ---@field updated_at string
+---@field closed_at string?    When it was resolved; nil while open.
 ---@field raw table
 
 ---@class issuehub.ViewItem

@@ -122,6 +122,7 @@ function Redmine:_to_issue(raw)
     url = ("%s/issues/%s"):format(self.base, raw.id),
     created_at = raw.created_on,
     updated_at = raw.updated_on,
+    closed_at = raw.closed_on,
     comments = comments,
     raw = raw,
   })

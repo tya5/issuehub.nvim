@@ -307,7 +307,56 @@ function M.find(input, opts)
   require("issuehub.ui.picker").pick(view, { title = ("find (%d)"):format(#items) })
 end
 
+---Every issue known locally: the cache and the workspace, merged.
+---
+--- The two do not contain the same set. An issue you annotated months ago may
+--- have fallen out of the cache, and an issue you fetched may have no notes.
+--- Exporting either alone silently drops rows, so the union is the honest
+--- default — with blanks where one side has nothing to say.
+---@param provider_name string?   Scope to one server.
+---@return issuehub.ViewItem[]
+function M.merged_items(provider_name)
+  local index = require("issuehub.core.index").get()
+  local issue_mod = require("issuehub.core.issue")
+  local cache = require("issuehub.core.cache")
+
+  local items, seen = {}, {}
+  for _, item in ipairs(index:list({ provider = provider_name })) do
+    seen[item.uri] = true
+    items[#items + 1] = item
+  end
+
+  -- Anything with local notes that the index does not know about.
+  for _, uri in ipairs(require("issuehub.core.workspace").with_overlay()) do
+    local provider = issue_mod.parse(uri)
+    if not seen[uri] and (not provider_name or provider == provider_name) then
+      seen[uri] = true
+      local entry = cache.get(uri)
+      if entry and entry.issue then
+        items[#items + 1] = issue_mod.to_item(entry.issue)
+      else
+        -- No payload at all: the row still carries the workspace side, and the
+        -- issue columns come out empty rather than the row vanishing.
+        items[#items + 1] = {
+          uri = uri,
+          id = select(2, issue_mod.parse(uri)) or uri,
+          title = "",
+          status = "",
+          closed = false,
+          updated_at = "",
+          bookmarked = false,
+        }
+      end
+    end
+  end
+
+  return require("issuehub.core.index").sort(items)
+end
+
 ---Resolve an export/collection source name to a View.
+---
+---Order matters: a collection you named wins over a provider of the same name,
+---because you created it deliberately.
 ---@param source string?
 ---@return issuehub.View?
 ---@return string? err
@@ -320,14 +369,15 @@ function M.resolve_view(source)
     if last and not last:is_empty() then
       return last
     end
-    source = "local"
+    source = "all"
   end
 
   if source == "local" then
     local items = require("issuehub.core.index").get():list({ closed = false })
     return view_mod.new({ source = "query", label = "local", items = items })
   elseif source == "all" then
-    return view_mod.new({ source = "query", label = "all", items = require("issuehub.core.index").get():list() })
+    -- Cache and workspace merged, so nothing local is left out.
+    return view_mod.new({ source = "query", label = "all", items = M.merged_items(nil) })
   elseif source == "bookmarks" then
     local items = require("issuehub.core.index").get():list({ bookmarked = true })
     return view_mod.new({ source = "bookmarks", label = "bookmarks", items = items })
@@ -340,7 +390,13 @@ function M.resolve_view(source)
   if view then
     return view
   end
-  return nil, ("unknown source '%s' (try a collection name, or local|all|bookmarks|changed)"):format(source)
+
+  -- A provider instance name exports that server's merged set.
+  if vim.tbl_contains(require("issuehub.provider").configured_names(), source) then
+    return view_mod.new({ source = "query", label = source, items = M.merged_items(source) })
+  end
+
+  return nil, ("unknown source '%s' (a collection, a provider name, or local|all|bookmarks|changed)"):format(source)
 end
 
 ---Export a View.

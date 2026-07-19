@@ -496,10 +496,31 @@ deliberately static lists rather than saved queries: a list diffs cleanly, and
 Export takes a |issuehub-view|, never a picker — so the same call works on a
 collection, a multi-select, or a set built by a script.
 
-Output combines the latest CACHED issue with your workspace overlay. Metadata
-keys are flattened to `meta.<key>`, multi-value fields join with `; `, and
-`fetched_at` is included so staleness travels with the data. Export performs
-no network I/O; run `:IssueHub sync` first if freshness matters.
+Sources are a collection name, a provider instance name, or one of `local`,
+`all`, `bookmarks`, `changed`. With no source it exports the view you last
+looked at.
+
+`all`, and a provider name, mean THE CACHE AND YOUR WORKSPACE MERGED. The two
+do not hold the same set: an issue annotated months ago may have fallen out of
+the cache, and a fetched issue may have no notes. Exporting either alone drops
+rows silently, so the union is the default, with blank cells where one side
+has nothing to say.
+
+                                                   *issuehub-export-columns*
+Columns are ordered for analysis rather than for reading: >
+    uri, provider, id, title, status, closed,
+    created_at, closed_at, updated_at, age_days, days_to_close,
+    assignee, reporter, labels, comments, url, bookmarked, fetched_at, memo,
+    meta.<your keys...>
+<
+`created_at` and `closed_at` are what a defect curve is built from. `age_days`
+and `days_to_close` are precomputed, because date arithmetic in a spreadsheet
+is where these analyses usually go wrong; an open issue ages to now and leaves
+`days_to_close` empty.
+
+Metadata keys flatten to `meta.<key>`, multi-value fields join with `; `, and
+`fetched_at` travels with the data. Export performs no network I/O; run
+`:IssueHub sync` or `:IssueHub fetch` first if freshness matters.
 
 Markdown export keeps memos as prose under a `## Notes` heading rather than
 forcing multi-line text into table cells.

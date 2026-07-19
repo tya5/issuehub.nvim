@@ -104,7 +104,7 @@ describe("other formats", function()
     local path = assert(export.write("markdown", view, { path = vim.fn.tempname() .. ".md" }))
     local content = fs.read(path)
 
-    assert.truthy(content:find("| uri | id |", 1, true))
+    assert.truthy(content:find("| uri | provider | id |", 1, true))
     -- A table cell is the wrong shape for multi-line prose.
     assert.is_nil(content:match("|[^\n]*multi\nline"))
     assert.truthy(content:find("## Notes", 1, true))
@@ -215,5 +215,184 @@ describe("collections", function()
     collection.add("Sprint A", "jira://PROJ-1")
     local path = assert(export.write("csv", collection.to_view("Sprint A"), { path = vim.fn.tempname() .. ".csv" }))
     assert.truthy(fs.read(path):find("PROJ-1", 1, true))
+  end)
+end)
+
+describe("merged export source", function()
+  local issuehub = require("issuehub")
+  local workspace = require("issuehub.core.workspace")
+
+  before_each(function()
+    fresh()
+    -- Cached and annotated.
+    cache.put(make("PROJ-1"))
+    overlay.write("jira://PROJ-1", { memo = "notes for one", metadata = "priority: high" })
+    -- Cached, never annotated.
+    cache.put(make("PROJ-2"))
+    -- Annotated but never cached: months-old work whose payload expired.
+    overlay.write("jira://PROJ-3", { memo = "notes only, no payload" })
+  end)
+
+  it("includes issues that have notes but no cache entry", function()
+    local view = assert(issuehub.resolve_view("all"))
+    local ids = vim.tbl_map(function(item)
+      return item.id
+    end, view:get_items())
+    table.sort(ids)
+    -- Exporting the index alone would silently drop PROJ-3.
+    assert.same({ "PROJ-1", "PROJ-2", "PROJ-3" }, ids)
+  end)
+
+  it("leaves the issue columns blank rather than dropping the row", function()
+    local rows = export.rows(assert(issuehub.resolve_view("all")))
+    local by_id = {}
+    for _, row in ipairs(rows) do
+      by_id[row.id] = row
+    end
+
+    assert.equals("notes only, no payload", by_id["PROJ-3"].memo)
+    assert.equals("", by_id["PROJ-3"].title)
+    assert.equals("", by_id["PROJ-3"].fetched_at)
+
+    -- And the other direction: cached with nothing written locally.
+    assert.equals("Timeout on warmup", by_id["PROJ-2"].title)
+    assert.equals("", by_id["PROJ-2"].memo)
+    assert.is_nil(by_id["PROJ-2"]["meta.priority"])
+
+    -- Both sides present where both exist.
+    assert.equals("notes for one", by_id["PROJ-1"].memo)
+    assert.equals("high", by_id["PROJ-1"]["meta.priority"])
+  end)
+
+  it("writes every row to csv", function()
+    local path = assert(export.write("csv", assert(issuehub.resolve_view("all")), {
+      path = vim.fn.tempname() .. ".csv",
+    }))
+    local content = fs.read(path)
+    for _, id in ipairs({ "PROJ-1", "PROJ-2", "PROJ-3" }) do
+      assert.truthy(content:find(id, 1, true))
+    end
+  end)
+
+  it("scopes to one server when given a provider name", function()
+    cache.put(issue_mod.normalize({
+      provider = "github",
+      id = "o/r#1",
+      title = "elsewhere",
+      status = { id = "1", name = "Open" },
+      updated_at = "2026-07-19T10:00:00Z",
+    }))
+    config.setup({
+      workspace = config.get().workspace,
+      index = "json",
+      providers = { jira = { url = "https://x", token_env = "T" }, github = { token_env = "T" } },
+    })
+
+    local view = assert(issuehub.resolve_view("jira"))
+    for _, item in ipairs(view:get_items()) do
+      assert.truthy(item.uri:find("^jira://"))
+    end
+  end)
+
+  it("prefers a collection over a provider of the same name", function()
+    config.setup({
+      workspace = config.get().workspace,
+      index = "json",
+      providers = { jira = { url = "https://x", token_env = "T" } },
+    })
+    collection.add("jira", "jira://PROJ-1")
+
+    local view = assert(issuehub.resolve_view("jira"))
+    -- You named the collection deliberately; that wins.
+    assert.equals(1, view:count())
+  end)
+
+  it("names the unknown source in the error", function()
+    local _, err = issuehub.resolve_view("nope")
+    assert.truthy(err:find("nope", 1, true))
+    assert.truthy(err:find("local|all|bookmarks|changed", 1, true))
+  end)
+
+  it("still carries bookmarks from the workspace", function()
+    workspace.toggle_bookmark("jira://PROJ-3")
+    local rows = export.rows(assert(issuehub.resolve_view("all")))
+    for _, row in ipairs(rows) do
+      if row.id == "PROJ-3" then
+        assert.is_true(row.bookmarked)
+      end
+    end
+  end)
+end)
+
+describe("columns for analysis", function()
+  before_each(fresh)
+
+  it("carries the dates a defect curve is built from", function()
+    cache.put(make("PROJ-1", {
+      created_at = "2026-06-01T10:00:00Z",
+      closed_at = "2026-06-11T10:00:00Z",
+      status = { id = "6", name = "Done", closed = true },
+    }))
+    local rows = export.rows(view_mod.new({
+      label = "x",
+      items = { issue_mod.to_item(cache.get("jira://PROJ-1").issue) },
+    }))
+
+    assert.equals("2026-06-01T10:00:00Z", rows[1].created_at)
+    assert.equals("2026-06-11T10:00:00Z", rows[1].closed_at)
+    -- Precomputed: date arithmetic in a spreadsheet is where these analyses
+    -- usually go wrong.
+    assert.equals(10, rows[1].days_to_close)
+    assert.equals(10, rows[1].age_days)
+  end)
+
+  it("ages an open issue to now, and leaves days_to_close empty", function()
+    cache.put(make("PROJ-2", { created_at = "2026-07-09T10:00:00Z" }))
+    local rows = export.rows(view_mod.new({
+      label = "x",
+      items = { issue_mod.to_item(cache.get("jira://PROJ-2").issue) },
+    }))
+
+    assert.equals("", rows[1].closed_at)
+    assert.is_nil(rows[1].days_to_close)
+    -- Open issues still have an age, which is what a backlog curve plots.
+    assert.truthy(rows[1].age_days and rows[1].age_days > 0)
+  end)
+
+  it("includes provider, reporter, and comment count", function()
+    cache.put(make("PROJ-3", { reporter = "alice", raw = { comment_total = 7 } }))
+    local rows = export.rows(view_mod.new({
+      label = "x",
+      items = { issue_mod.to_item(cache.get("jira://PROJ-3").issue) },
+    }))
+
+    assert.equals("jira", rows[1].provider)
+    assert.equals("alice", rows[1].reporter)
+    assert.equals(7, rows[1].comments)
+  end)
+
+  it("puts the analysis columns in a stable, useful order", function()
+    local _, columns = export.rows(view_of(make("PROJ-1")))
+    local position = {}
+    for i, name in ipairs(columns) do
+      position[name] = i
+    end
+    -- Identity, then the dates, then the rest.
+    assert.truthy(position.id < position.created_at)
+    assert.truthy(position.created_at < position.closed_at)
+    assert.truthy(position.closed_at < position.assignee)
+  end)
+
+  it("leaves every date column blank for an issue with no payload", function()
+    overlay.write("jira://GONE-1", { memo = "notes only" })
+    local rows = export.rows(assert(require("issuehub").resolve_view("all")))
+    for _, row in ipairs(rows) do
+      if row.id == "GONE-1" then
+        assert.equals("", row.created_at)
+        assert.equals("", row.closed_at)
+        assert.is_nil(row.age_days)
+        assert.equals("notes only", row.memo)
+      end
+    end
   end)
 end)

@@ -123,6 +123,8 @@ function GitHub:_to_issue(raw)
     url = raw.html_url,
     created_at = raw.created_at,
     updated_at = raw.updated_at,
+    -- merged_at for a pull request, closed_at for an issue.
+    closed_at = raw.merged_at or raw.closed_at,
     raw = raw,
   })
 end

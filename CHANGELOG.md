@@ -8,6 +8,22 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ## [Unreleased]
 
+### Added
+
+- **Export merges the cache with the workspace.** `all`, and a provider instance
+  name, now export the union of both rather than whatever the index happens to
+  hold. The two sets differ — an issue annotated months ago may have fallen out
+  of the cache, a fetched issue may have no notes — and exporting either alone
+  dropped rows silently. Rows with no payload keep their notes and leave the
+  issue columns blank.
+- **Columns for analysis.** `created_at` and `closed_at` (new on the canonical
+  Issue, populated by all four providers from `resolutiondate`, `closed_at`,
+  `merged_at`, and `closed_on`), plus `provider`, `reporter`, `comments`, and
+  precomputed `age_days` / `days_to_close`. A defect curve needs the dates an
+  issue arrived and left; the export previously carried neither. The arithmetic
+  is precomputed because doing it in a spreadsheet is where these analyses
+  usually go wrong — an open issue ages to now and leaves `days_to_close` empty.
+
 ### Changed
 
 - **`open`, `find`/browse, `local`, and `fetch` are all per server.** Browsing

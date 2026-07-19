@@ -727,14 +727,41 @@ in Git, and "why is this issue in here" always has a literal answer.
 :IssueHub export markdown changed
 ```
 
-Sources are a collection name or one of `local`, `all`, `bookmarks`, `changed`.
-With no source, export acts on **what you were just looking at** — the last view
-the picker showed.
+Sources are a collection name, a provider instance name, or one of `local`,
+`all`, `bookmarks`, `changed`. With no source, export acts on **what you were
+just looking at** — the last view the picker showed.
 
-Output combines the latest *cached* issue with your workspace overlay:
-metadata keys are flattened to `meta.<key>`, multi-value fields join with `; `,
+`all` (and a provider name) means **the cache and your workspace merged**. The
+two do not hold the same set: an issue you annotated months ago may have fallen
+out of the cache, and an issue you fetched may have no notes. Exporting either
+alone silently drops rows, so the union is the default, with blank cells where
+one side has nothing to say.
+
+#### Columns
+
+Ordered for analysis rather than for reading:
+
+```
+uri, provider, id, title, status, closed,
+created_at, closed_at, updated_at, age_days, days_to_close,
+assignee, reporter, labels, comments, url, bookmarked, fetched_at, memo,
+meta.<your keys...>
+```
+
+`created_at` and `closed_at` are what a defect curve is built from.
+`age_days` and `days_to_close` are precomputed — date arithmetic in a
+spreadsheet is where these analyses usually go wrong; an open issue ages to now
+and leaves `days_to_close` empty.
+
+```sh
+:IssueHub export csv all
+# then: closed per month, straight from the CSV
+```
+
+Metadata keys are flattened to `meta.<key>`, multi-value fields join with `; `,
 and `fetched_at` is included so staleness travels with the data. Export performs
-no network I/O — run `:IssueHub sync` first if freshness matters.
+no network I/O — run `:IssueHub sync` or `:IssueHub fetch` first if freshness
+matters.
 
 Markdown export keeps memos as prose under a `## Notes` heading rather than
 cramming multi-line text into table cells.

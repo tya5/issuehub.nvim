@@ -11,7 +11,7 @@ local M = {}
 local Jira = {}
 Jira.__index = Jira
 
-local FIELDS = "summary,description,status,assignee,reporter,labels,created,updated"
+local FIELDS = "summary,description,status,assignee,reporter,labels,created,updated,resolutiondate"
 
 ---@param name string?  Instance name; also the URI scheme. Defaults to "jira".
 function M.new(name)
@@ -131,6 +131,7 @@ function Jira:_to_issue(raw)
     url = ("%s/browse/%s"):format(self.base, raw.key),
     created_at = f.created,
     updated_at = f.updated,
+    closed_at = f.resolutiondate,
     raw = raw,
   })
 end

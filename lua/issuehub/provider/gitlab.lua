@@ -90,6 +90,7 @@ function GitLab:_to_issue(raw)
     url = raw.web_url,
     created_at = raw.created_at,
     updated_at = raw.updated_at,
+    closed_at = raw.closed_at,
     raw = raw,
   })
 end

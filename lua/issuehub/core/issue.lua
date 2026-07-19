@@ -108,6 +108,9 @@ function M.normalize(issue)
     comments = issue.comments or {},
     created_at = M.timestamp(issue.created_at),
     updated_at = M.timestamp(issue.updated_at),
+    -- Only meaningful once closed; nil is the honest value while open, and an
+    -- empty cell is what a spreadsheet wants for "not yet".
+    closed_at = issue.closed_at and M.timestamp(issue.closed_at) or nil,
     raw = issue.raw or {},
   }
 end

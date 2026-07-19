@@ -25,20 +25,62 @@ local registry = {}
 
 ---Columns always present, in this order. Metadata keys are appended as
 ---`meta.<key>`, so a flat table can carry free-form YAML without a schema.
+---
+--- Ordered for analysis rather than for reading: the identity columns, then the
+--- dates a defect curve is built from (`created_at`, `closed_at`, and
+--- `age_days` / `days_to_close` precomputed because a spreadsheet does date
+--- arithmetic badly), then the rest.
 local BASE_COLUMNS = {
   "uri",
+  "provider",
   "id",
   "title",
   "status",
   "closed",
-  "assignee",
-  "labels",
+  "created_at",
+  "closed_at",
   "updated_at",
-  "fetched_at",
-  "bookmarked",
+  "age_days",
+  "days_to_close",
+  "assignee",
+  "reporter",
+  "labels",
+  "comments",
   "url",
+  "bookmarked",
+  "fetched_at",
   "memo",
 }
+
+---Whole days between two ISO 8601 timestamps.
+---@param from string?
+---@param to string?
+---@return number?
+local function days_between(from, to)
+  if not from or from == "" or not to or to == "" then
+    return nil
+  end
+  local function epoch(stamp)
+    local y, mo, d, h, mi, sec = stamp:match("(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)")
+    if not y then
+      return nil
+    end
+    return os.time({
+      year = tonumber(y),
+      month = tonumber(mo),
+      day = tonumber(d),
+      hour = tonumber(h),
+      min = tonumber(mi),
+      sec = tonumber(sec),
+      isdst = false,
+    })
+  end
+  local a, b = epoch(from), epoch(to)
+  if not a or not b then
+    return nil
+  end
+  return math.floor(os.difftime(b, a) / 86400 * 10 + 0.5) / 10
+end
 
 ---@param value any
 ---@return string
@@ -70,15 +112,28 @@ local function row_for(item)
   local o = overlay.read(item.uri)
   local state = workspace.state(item.uri)
 
+  local now = os.date("!%Y-%m-%dT%H:%M:%SZ")
+  local created = issue and issue.created_at or ""
+  local closed_at = issue and issue.closed_at or nil
+
   local row = {
     uri = item.uri,
+    provider = select(1, require("issuehub.core.issue").parse(item.uri)) or "",
     id = item.id,
     title = issue and issue.title or item.title,
     status = issue and issue.status.name or item.status,
     closed = issue and issue.status.closed or item.closed,
-    assignee = issue and issue.assignee or item.assignee,
-    labels = issue and issue.labels or {},
+    created_at = created,
+    closed_at = closed_at or "",
     updated_at = issue and issue.updated_at or item.updated_at,
+    -- Precomputed because date arithmetic in a spreadsheet is where these
+    -- analyses usually go wrong.
+    age_days = days_between(created, closed_at or now),
+    days_to_close = closed_at and days_between(created, closed_at) or nil,
+    assignee = issue and issue.assignee or item.assignee,
+    reporter = issue and issue.reporter or "",
+    labels = issue and issue.labels or {},
+    comments = issue and ((issue.raw or {}).comment_total or #(issue.comments or {})) or nil,
     -- Freshness travels with the data: an export is a snapshot of the cache,
     -- not of the tracker.
     fetched_at = entry and entry.fetched_at or "",
