@@ -83,16 +83,28 @@ local function enforce_readonly(buf)
     warn_once(buf, message)
   end
 
-  if not ranges then
-    -- A section heading was destroyed; without it the buffer can no longer be
-    -- mapped back onto files, so the whole thing goes back to the last good
-    -- state rather than guessing.
-    return restore(state.last_good, ("section headings must stay intact (%s) — reverted"):format(err))
+  -- Where the editable region begins. Extmarks are authoritative and survive a
+  -- memo that merely *contains* a line like "## Metadata"; the text scan is the
+  -- fallback for a buffer whose marks were lost.
+  local first_heading = math.huge
+  if state.marks then
+    for _, id in pairs(state.marks) do
+      local mark = vim.api.nvim_buf_get_extmark_by_id(buf, ns, id, {})
+      if mark and mark[1] then
+        first_heading = math.min(first_heading, mark[1])
+      end
+    end
   end
 
-  local first_heading = math.huge
-  for _, range in pairs(ranges) do
-    first_heading = math.min(first_heading, range.first - 1)
+  if first_heading == math.huge then
+    if not ranges then
+      -- No marks AND no parseable headings: the buffer can no longer be mapped
+      -- back onto files, so restore rather than guess.
+      return restore(state.last_good, ("section headings must stay intact (%s) — reverted"):format(err))
+    end
+    for _, range in pairs(ranges) do
+      first_heading = math.min(first_heading, range.first - 1)
+    end
   end
 
   local prefix_ok = (first_heading - 1) == #state.readonly
@@ -143,7 +155,9 @@ local SECTION_LABEL = {
 
 ---@param buf integer
 ---@param result issuehub.RenderResult
+---@return table<string, integer> marks  field -> extmark id over its CONTENT
 local function decorate(buf, result)
+  local marks = {}
   local first_editable = math.huge
   for name, range in pairs(result.sections) do
     local label = SECTION_LABEL[name]
@@ -162,6 +176,21 @@ local function decorate(buf, result)
         end_right_gravity = true,
       })
       vim.b[buf]["issuehub_section_" .. name] = { range.first, range.last }
+
+      -- A second mark over the section's CONTENT only (everything below the
+      -- heading). Writeback reads these instead of re-scanning the text for
+      -- headings, so a line like "## Metadata" typed inside a memo is just
+      -- text. Extmarks move with the user's edits, which is what makes this
+      -- work at all.
+      if SECTION_LABEL[name] and SECTION_LABEL[name].hl == "IssueHubEditable" then
+        local content_start = math.min(range.first + 1, #result.lines)
+        local content_end = math.max(math.min(range.last, #result.lines), content_start)
+        marks[name] = vim.api.nvim_buf_set_extmark(buf, ns, content_start - 1, 0, {
+          end_row = content_end - 1,
+          right_gravity = false,
+          end_right_gravity = true,
+        })
+      end
 
       local label = SECTION_LABEL[name]
       if label then
@@ -182,6 +211,44 @@ local function decorate(buf, result)
       virt_lines = { { { ("─"):rep(30) .. " your workspace below ", "IssueHubDivider" } } },
     })
   end
+
+  return marks
+end
+
+---Read the editable regions back from their extmarks.
+---
+--- Preferred over scanning the buffer for headings: the headings are ordinary
+--- Markdown, so a memo containing the line "## Metadata" made the text scan see
+--- a duplicate and refuse to save — permanently, once such a memo existed on
+--- disk (editing the workspace outside Neovim is a supported workflow).
+---@param buf integer
+---@return table<string, string>? content  nil when the marks are unusable.
+local function extract_by_marks(buf)
+  local state = tracked[buf]
+  if not state or not state.marks then
+    return nil
+  end
+
+  local lines = lines_of(buf)
+  local content = {}
+  for _, spec in ipairs(render.SECTIONS) do
+    local id = state.marks[spec.field]
+    if not id then
+      return nil
+    end
+    local mark = vim.api.nvim_buf_get_extmark_by_id(buf, ns, id, { details = true })
+    if not mark or not mark[1] then
+      return nil
+    end
+    local first = mark[1] + 1
+    local last = (mark[3] and mark[3].end_row or mark[1]) + 1
+    local body = {}
+    for i = first, math.min(last, #lines) do
+      body[#body + 1] = lines[i] or ""
+    end
+    content[spec.field] = (table.concat(body, "\n"):gsub("^%s*\n", ""):gsub("%s+$", ""))
+  end
+  return content
 end
 
 ---@param buf integer
@@ -200,9 +267,10 @@ local function paint(buf, result, uri)
   end
 
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-  decorate(buf, result)
+  local marks = decorate(buf, result)
 
   tracked[buf] = tracked[buf] or {}
+  tracked[buf].marks = marks
   tracked[buf].uri = uri
   tracked[buf].readonly = vim.list_slice(result.lines, 1, result.readonly_until)
   tracked[buf].last_good = result.lines
@@ -217,10 +285,16 @@ function M.save(buf)
     return false
   end
 
-  local content, err = render.extract(lines_of(buf))
+  -- Extmarks first; the text scan is only a fallback for a buffer whose marks
+  -- were lost (reload, :edit!).
+  local content = extract_by_marks(buf)
   if not content then
-    vim.notify("issuehub: cannot save — " .. tostring(err), vim.log.levels.ERROR)
-    return false
+    local err
+    content, err = render.extract(lines_of(buf))
+    if not content then
+      vim.notify("issuehub: cannot save — " .. tostring(err), vim.log.levels.ERROR)
+      return false
+    end
   end
 
   local written, werr = overlay_mod.write(state.uri, content)

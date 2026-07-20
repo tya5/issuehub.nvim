@@ -149,15 +149,36 @@ describe("issue buffer", function()
     assert.truthy(index_of(buf, "keep me"))
   end)
 
-  it("reverts wholesale when a section heading is deleted", function()
+  it("keeps mapping content correctly when a section heading is deleted", function()
+    -- Used to revert the whole buffer, because the text scan could no longer
+    -- find the boundaries. Extmarks track the regions through the edit, so the
+    -- user's content is preserved and still writes to the right file; the
+    -- heading comes back on the next render.
     local buf = open()
+    local memo_at = assert(index_of(buf, "## Memo"))
+    vim.api.nvim_buf_set_lines(buf, memo_at + 1, memo_at + 1, false, { "kept through the edit" })
+
     local at = assert(index_of(buf, "## Metadata"))
     vim.api.nvim_buf_set_lines(buf, at - 1, at, false, {})
     buffer._enforce(buf)
 
-    -- Without the heading the buffer cannot be mapped back onto files, so
-    -- guessing is worse than restoring.
-    assert.truthy(index_of(buf, "## Metadata"))
+    assert.truthy(index_of(buf, "kept through the edit"))
+    assert.is_true(buffer.save(buf))
+    assert.equals("kept through the edit", overlay.read(URI).memo)
+  end)
+
+  it("treats a section heading typed inside a memo as ordinary text", function()
+    -- The previously fatal case: `## Metadata` written into memo.md outside
+    -- Neovim (a supported workflow — it is your Git repo) made every later
+    -- save fail with "duplicate heading", permanently.
+    local memo = "notes\n\n## Metadata\n\nstill the memo"
+    overlay.write(URI, { memo = memo, metadata = "priority: high" })
+
+    local buf = open()
+    assert.is_true(buffer.save(buf))
+    assert.equals(memo, overlay.read(URI).memo)
+    -- and the real metadata section is not polluted by the lookalike line
+    assert.equals("priority: high", overlay.read(URI).metadata)
   end)
 
   it("removes the file when the user empties a section", function()
