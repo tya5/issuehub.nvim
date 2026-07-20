@@ -480,6 +480,68 @@ function M.export(format, source, path)
   vim.notify(("issuehub: exported %d issue(s) to %s"):format(#view:get_selected(), written))
 end
 
+---Merge an exported file back into the workspace.
+---
+---Only the local half is merged: memo, `meta.*`, and bookmarks. Issue columns
+---are read and discarded — the tracker owns those, and importing them would let
+---a stale spreadsheet overwrite the cache with fiction.
+---
+---The file wins on conflict, which is safe because the workspace is a Git
+---repository: `git diff` is the undo. When it is NOT one, that net is gone, so
+---say so rather than assume.
+---@param path string
+---@param opts { dry_run: boolean? }?
+function M.import(path, opts)
+  opts = opts or {}
+  if not path or path == "" then
+    return vim.notify("issuehub: :IssueHub import <file> [--dry-run]", vim.log.levels.ERROR)
+  end
+
+  local result, err = require("issuehub.core.import").run(path, opts)
+  if not result then
+    return vim.notify("issuehub: " .. tostring(err), vim.log.levels.ERROR)
+  end
+
+  local verb = opts.dry_run and "would update" or "updated"
+  local lines = { ("issuehub: %s %d issue(s), %d unchanged"):format(verb, #result.imported, result.unchanged) }
+
+  if #result.overwritten > 0 then
+    local names = {}
+    for _, item in ipairs(result.overwritten) do
+      names[#names + 1] = ("%s (%s)"):format(item.uri, item.field)
+    end
+    lines[#lines + 1] = ("  overwrote existing local content in %d place(s):"):format(#result.overwritten)
+    for i = 1, math.min(#names, 8) do
+      lines[#lines + 1] = "    " .. names[i]
+    end
+    if #names > 8 then
+      lines[#lines + 1] = ("    … and %d more"):format(#names - 8)
+    end
+  end
+
+  if #result.metadata_comments > 0 then
+    -- metadata.yaml is normally written back verbatim; an import regenerates it.
+    lines[#lines + 1] = ("  NOTE: comments in metadata.yaml were lost for %d issue(s)"):format(
+      #result.metadata_comments
+    )
+  end
+
+  for _, e in ipairs(result.errors) do
+    lines[#lines + 1] = "  error: " .. e
+  end
+
+  if not opts.dry_run and #result.imported > 0 then
+    local root = require("issuehub.core.repository").root()
+    if root and not require("issuehub.util.fs").is_dir(vim.fs.joinpath(root, ".git")) then
+      lines[#lines + 1] = "  WARNING: this workspace is not a Git repository, so there is no `git diff` to undo with"
+    else
+      lines[#lines + 1] = "  review with: git -C " .. (root or "<workspace>") .. " diff"
+    end
+  end
+
+  vim.notify(table.concat(lines, "\n"), #result.errors > 0 and vim.log.levels.WARN or vim.log.levels.INFO)
+end
+
 ---Open a collection, or pick one when no name is given.
 ---@param name string?
 function M.collection(name)

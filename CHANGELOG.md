@@ -10,6 +10,21 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ### Added
 
+- **Import.** `:IssueHub import <file>` merges an exported CSV or JSON back into
+  the workspace, so a triage pass done in a spreadsheet can come home. Only the
+  local half is merged — `memo`, `meta.*`, `bookmarked`; the issue columns are
+  read and discarded, because the tracker owns them and a stale sheet must not
+  rewrite the cache. Absent columns are left alone rather than cleared.
+  - The file wins on conflict without prompting, which is defensible only
+    because the workspace is a Git repo: the report names every issue whose
+    content was replaced, `--dry-run` previews it, and the command warns when
+    the workspace is *not* under Git and the undo therefore does not exist.
+  - `metadata.yaml` comments cannot survive an import (the file is regenerated
+    from merged keys), so the report counts the issues where they were lost
+    rather than letting it happen quietly.
+
+### Added
+
 - **Translations.** `:IssueHub translate <lang>` sends an issue through the
   configured backend and stores the result as `translations/<lang>.md` beside
   the notes — one file per language, tracked in Git, hand-editable when the

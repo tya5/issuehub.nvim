@@ -90,6 +90,18 @@ local subcommands = {
     require("issuehub").analyses(args[1])
   end,
 
+  import = function(args)
+    local dry = false
+    args = vim.tbl_filter(function(arg)
+      if arg == "--dry-run" then
+        dry = true
+        return false
+      end
+      return true
+    end, args)
+    require("issuehub").import(args[1], { dry_run = dry })
+  end,
+
   export = function(args)
     -- [format] [source]. The output path comes from `export.dir` (or the cwd)
     -- and the view's own name, so there is no third positional to get wrong.

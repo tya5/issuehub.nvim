@@ -233,6 +233,10 @@ pollute the global command namespace.
 :IssueHub bookmarks       Picker over bookmarked issues.
 :IssueHub collection ...  `add {name}` | `remove {name}` | `delete {name}` |
                           `list` | `{name}` to open one.
+:IssueHub import {file} [--dry-run]
+                          Merge an exported CSV or JSON back into the
+                          workspace. Only memo, `meta.*`, and bookmarks are
+                          merged. See |issuehub-import|.
 :IssueHub export [{format}] [{source}]
                           Export a view. {format} is csv, markdown, json, or
                           yaml. {source} is a collection name or one of
@@ -511,6 +515,27 @@ Collections are local, static, cross-provider lists stored as YAML under
 `.issuehub/collections/` and committed with your workspace. They are
 deliberately static lists rather than saved queries: a list diffs cleanly, and
 "why is this issue in here" always has a literal answer.
+
+                                                          *issuehub-import*
+`:IssueHub import <file>` merges an exported CSV or JSON back in. It is
+deliberately asymmetric with export: **only the local half is merged** —
+`memo`, `meta.*`, and `bookmarked`. Issue columns (title, status, dates,
+assignee) are read and discarded, because the tracker owns them and a stale
+spreadsheet must not overwrite the cache with fiction.
+
+Rows for issues with no local content are created; a `uri` that is not a valid
+issue URI is reported and skipped.
+
+**The file wins on conflict**, without prompting. That is safe because the
+workspace is a Git repository — `git diff` is the undo — and the report names
+every issue whose existing content was replaced. `--dry-run` shows the same
+report without writing. If the workspace is NOT a Git repo the report says so,
+because then nothing is recoverable.
+
+One asymmetry to know: `metadata.yaml` is normally written back verbatim so
+comments and key order survive. An import regenerates it from the merged key
+set, so comments in that file are lost; keys absent from the import are
+preserved, and the report counts the issues where comments went.
 
                                                           *issuehub-export*
 Export takes a |issuehub-view|, never a picker — so the same call works on a

@@ -533,6 +533,7 @@ log file.
 :IssueHub changed        " issues that moved since you last opened them
 :IssueHub collection ... " manage and open collections
 :IssueHub export [fmt] [source]
+:IssueHub import <file>  " merge memo/meta/bookmarks back in
 :IssueHub analyze        " analyse via the configured backend
 :IssueHub analyses       " analysis history for the current issue
 :IssueHub refresh        " re-fetch the current issue buffer
@@ -792,6 +793,35 @@ Add your own format:
 ```lua
 require("issuehub.core.export").register("xlsx", { ext = "xlsx", write = fn })
 ```
+
+#### Importing back
+
+Round-tripping through a spreadsheet is a real workflow — triage a few hundred
+rows in the tool that is good at rows, then bring the annotations home.
+
+```vim
+:IssueHub import ~/triage.csv --dry-run   " see what it would do
+:IssueHub import ~/triage.csv
+:IssueHub import ~/triage.json
+```
+
+Import is deliberately **not** the inverse of export. Only the half you own
+comes back — `memo`, `meta.*`, `bookmarked`. The issue columns are read and
+discarded, because the tracker owns those and a two-week-old spreadsheet must
+not overwrite the cache with fiction. Rows for issues you have no notes on yet
+are created; rows whose `uri` is not a valid issue URI are reported and skipped;
+a column that is absent means "not in this file", not "clear it".
+
+**The file wins on conflict**, with no per-row prompt. That is only defensible
+because the workspace is a Git repository — `git diff` is the undo — so the
+report names every issue whose content was replaced, and warns loudly if the
+workspace is not under Git. `--dry-run` prints the identical report and writes
+nothing.
+
+One asymmetry worth knowing: `metadata.yaml` is normally written back verbatim,
+so comments and key order survive an edit. An import regenerates it from the
+merged keys, so comments in *that* file are lost — keys you did not export are
+still preserved, and the report counts the issues where comments went.
 
 ### Staying current
 
