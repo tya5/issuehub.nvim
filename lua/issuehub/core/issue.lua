@@ -90,6 +90,33 @@ function M.status(status)
   }
 end
 
+---Normalise the attachment list a provider reported.
+---
+--- Entries without an id, a filename, or a URL are dropped: all three are
+--- needed to fetch and store the file, and a half-described attachment shown in
+--- a list that cannot then be downloaded is worse than one that was never
+--- listed.
+---@param list table[]?
+---@return issuehub.Attachment[]
+function M.attachments(list)
+  local out = {}
+  for _, att in ipairs(list or {}) do
+    local id = att.id ~= nil and tostring(att.id) or nil
+    if id and id ~= "" and att.filename and att.filename ~= "" and att.url and att.url ~= "" then
+      out[#out + 1] = {
+        id = id,
+        filename = tostring(att.filename),
+        url = tostring(att.url),
+        size = tonumber(att.size),
+        mime = att.mime,
+        author = att.author,
+        created_at = att.created_at and M.timestamp(att.created_at) or nil,
+      }
+    end
+  end
+  return out
+end
+
 ---Fill in every field so downstream code never has to nil-check.
 ---
 --- Enforces one cross-provider invariant: **`closed_at` exists only when
@@ -125,6 +152,9 @@ function M.normalize(issue)
     labels = issue.labels or {},
     url = issue.url,
     comments = issue.comments or {},
+    -- Metadata only: what the tracker says exists. Bytes are never fetched by
+    -- sync, and never live in the workspace (see core/attachment.lua).
+    attachments = M.attachments(issue.attachments),
     created_at = M.timestamp(issue.created_at),
     updated_at = M.timestamp(issue.updated_at),
     closed_at = closed_at,

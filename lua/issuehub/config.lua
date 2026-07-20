@@ -64,6 +64,14 @@ local defaults = {
     include_comments = false, -- comments can dominate the request on busy issues
   },
 
+  -- Attachments are cache, never workspace: they land under .state/, which is
+  -- git-ignored, because binaries cannot be removed from Git history and a
+  -- pasted screenshot is often more sensitive than the ticket text. Nothing is
+  -- fetched until you ask for it by name.
+  attachments = {
+    max_size = 50 * 1024 * 1024, -- refuse anything larger; 0 disables the check
+  },
+
   -- AI is opt-in. With "none", nothing is ever sent anywhere.
   backend = "none",
   backends = {

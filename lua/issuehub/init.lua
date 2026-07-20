@@ -804,6 +804,90 @@ function M.translate(lang, uri)
   end)
 end
 
+---List an issue's attachments and download the one you pick.
+---
+--- Explicit by design: `sync` records that a file exists, and nothing transfers
+--- until this is called. On a large tracker, fetching attachments during sync
+--- would move gigabytes for files nobody asked for.
+---@param uri string?
+---@param opts { all: boolean? }?
+function M.attachments(uri, opts)
+  opts = opts or {}
+  uri = uri or require("issuehub.ui.buffer").current_uri()
+  if not uri then
+    return vim.notify("issuehub: open an issue first, or pass a URI", vim.log.levels.WARN)
+  end
+
+  local attachment = require("issuehub.core.attachment")
+  local items = attachment.list(uri)
+  if #items == 0 then
+    local cached = require("issuehub.core.cache").get(uri)
+    if not cached then
+      return vim.notify(("issuehub: %s is not cached — open or sync it first"):format(uri), vim.log.levels.WARN)
+    end
+    -- Distinguish "none" from "the cache predates attachment support", which
+    -- otherwise looks identical and sends people hunting for a bug.
+    return vim.notify(
+      ("issuehub: no attachments recorded for %s (run `:IssueHub refresh` if you expected some)"):format(uri),
+      vim.log.levels.INFO
+    )
+  end
+
+  if opts.all then
+    return M._fetch_attachments(uri, items)
+  end
+
+  vim.ui.select(items, {
+    prompt = "Attachment",
+    format_item = function(att)
+      return ("%s  %s  [%s]"):format(
+        att.filename,
+        attachment.human_size(att.size or att.bytes),
+        att.downloaded and "downloaded" or "not downloaded"
+      )
+    end,
+  }, function(chosen)
+    if chosen then
+      M._fetch_attachments(uri, { chosen }, { open = true })
+    end
+  end)
+end
+
+---@param uri string
+---@param items issuehub.StoredAttachment[]
+---@param opts { open: boolean? }?
+function M._fetch_attachments(uri, items, opts)
+  opts = opts or {}
+  local attachment = require("issuehub.core.attachment")
+  local pending, failed = #items, {}
+
+  for _, att in ipairs(items) do
+    if not att.downloaded then
+      vim.notify(("issuehub: downloading %s…"):format(att.filename))
+    end
+    attachment.fetch(uri, att, function(err, path)
+      if err then
+        failed[#failed + 1] = ("%s: %s"):format(att.filename, err)
+      elseif opts.open then
+        -- The path is the deliverable; opening it is a convenience, and
+        -- vim.ui.open is the seam that keeps this plugin out of the business
+        -- of knowing how to view a PDF.
+        vim.notify(("issuehub: %s"):format(path))
+        pcall(vim.ui.open, path)
+      end
+
+      pending = pending - 1
+      if pending == 0 then
+        if #failed > 0 then
+          vim.notify("issuehub: " .. table.concat(failed, "\n"), vim.log.levels.ERROR)
+        elseif not opts.open then
+          vim.notify(("issuehub: %d attachment(s) in %s"):format(#items, attachment.dir(uri)))
+        end
+      end
+    end)
+  end
+end
+
 ---Browse an issue's stored translations.
 ---@param uri string?
 function M.translations(uri)

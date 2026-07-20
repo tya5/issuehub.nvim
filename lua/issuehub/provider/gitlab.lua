@@ -59,6 +59,28 @@ local function split_id(id)
   return project, iid
 end
 
+---GitLab uploads land at `/uploads/<secret>/<filename>`, written into the body
+---as a project-relative link. Resolving one needs the project path, which is
+---why this is built per issue rather than kept as a bare pattern.
+---@param web_url string?   The issue's own URL, ".../group/project/-/issues/12".
+---@return fun(url: string): string?
+local function gitlab_upload(web_url)
+  local root, project = nil, nil
+  if web_url then
+    root, project = web_url:match("^(https?://[^/]+)/(.+)/%-/issues/%d+$")
+  end
+  return function(url)
+    if url:match("^/uploads/") or url:match("^/%-/project/%d+/uploads/") then
+      -- A relative upload is unusable without knowing the project it hangs off.
+      return (root and project) and (root .. "/" .. project .. url) or nil
+    end
+    if url:match("^https?://[^/]+/.+/uploads/") then
+      return url
+    end
+    return nil
+  end
+end
+
 ---@param raw table
 ---@return issuehub.Issue
 function GitLab:_to_issue(raw)
@@ -89,6 +111,7 @@ function GitLab:_to_issue(raw)
     reporter = (raw.author or {}).name,
     labels = raw.labels or {},
     url = raw.web_url,
+    attachments = putil.markdown_attachments({ raw.description }, gitlab_upload(raw.web_url)),
     created_at = raw.created_at,
     updated_at = raw.updated_at,
     closed_at = raw.closed_at,
@@ -184,6 +207,13 @@ function GitLab:get(id, cb)
       cb(nil, issue)
     end)
   end)
+end
+
+---@param att issuehub.Attachment
+---@return issuehub.HttpRequest?
+---@return string? err
+function GitLab:attachment_request(att)
+  return putil.attachment_request(self:_ctx(), att.url)
 end
 
 ---@return boolean ok

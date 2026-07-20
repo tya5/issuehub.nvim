@@ -250,6 +250,10 @@ pollute the global command namespace.
                           See |issuehub-translations|.
 :IssueHub translations [{uri}]
                           Open a stored translation.
+:IssueHub attachments [{uri}] [--all]
+                          List the issue's attachments and download one.
+                          `--all` fetches every one. See
+                          |issuehub-attachments|.
 :IssueHub analyze [{uri}] Analyse through the configured backend.
 :IssueHub analyses [{uri}]
                           Browse an issue's analysis history.
@@ -621,6 +625,45 @@ searchable with `:IssueHub find`.
 
 Requires a backend; with the default `none`, `translate` reports that and does
 nothing. |issuehub-backends|
+
+                                                    *issuehub-attachments*
+ATTACHMENTS ~
+
+`:IssueHub attachments` lists what the issue has and downloads the one you
+pick; `--all` takes every one. `gx`-style opening is left to |vim.ui.open()|.
+
+Two rules, both deliberate:
+
+**They are cache, not workspace.** Files land under
+`.state/attachments/<provider>/<id>/<attachment-id>/<filename>`, which is
+git-ignored. A binary cannot be removed from Git history once committed, and a
+screenshot pasted into a ticket is often more sensitive than the ticket text,
+so this is the one part of an issue that never becomes a tracked file.
+Deleting `.state/` stays safe: the metadata returns with the next sync, and
+the bytes can be fetched again.
+
+**Nothing is fetched implicitly.** A sync records that a file exists — that is
+what the `Files:` line in the issue header reports — and only an explicit
+request transfers anything. On a tracker with twenty thousand issues, fetching
+attachments during sync would move gigabytes nobody asked for. >lua
+    attachments = {
+      max_size = 50 * 1024 * 1024,  -- refuse anything larger; 0 disables
+    }
+<
+Downloads use the same credentials, proxy, and TLS settings as every other
+request to that instance: an attachment is exactly as protected as its issue,
+and an unauthenticated fetch would save a login page that looks like a PDF.
+
+Jira and Redmine report attachments through their APIs, with size and type.
+GitHub and GitLab have no attachment API — an upload is a link in the issue
+body — so those are found by reading the body, and their size and type are
+reported as unknown rather than guessed. A hand-written link to an unrelated
+file on the same host is indistinguishable from an upload.
+
+Filenames come from the tracker and are reduced to a single path segment
+before use, so an attachment named `../../../.ssh/authorized_keys` cannot
+escape. Two attachments sharing a filename get separate directories rather
+than overwriting each other.
 
                                                      *issuehub-disclosure*
 What ends up in Git, and what leaves the machine ~

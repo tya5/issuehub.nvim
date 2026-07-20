@@ -86,6 +86,18 @@ local subcommands = {
     require("issuehub").translations(args[1])
   end,
 
+  attachments = function(args)
+    local all = false
+    args = vim.tbl_filter(function(arg)
+      if arg == "--all" then
+        all = true
+        return false
+      end
+      return true
+    end, args)
+    require("issuehub").attachments(args[1], { all = all })
+  end,
+
   analyses = function(args)
     require("issuehub").analyses(args[1])
   end,

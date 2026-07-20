@@ -11,7 +11,11 @@ local M = {}
 local Jira = {}
 Jira.__index = Jira
 
-local FIELDS = "summary,description,status,assignee,reporter,labels,created,updated,resolutiondate,project"
+-- `attachment` is metadata only (name, size, content URL); it costs one array
+-- per issue and no transfer, and without it the attachment list would need a
+-- second round trip per issue.
+local FIELDS =
+  "summary,description,status,assignee,reporter,labels,created,updated,resolutiondate,project,attachment"
 
 ---@param name string?  Instance name; also the URI scheme. Defaults to "jira".
 function M.new(name)
@@ -105,6 +109,25 @@ function Jira:_call(path, opts, cb)
   end)
 end
 
+---@param f table   The issue's `fields` object.
+---@return table[]
+local function attachments_of(f)
+  local out = {}
+  for _, att in ipairs(f.attachment or {}) do
+    out[#out + 1] = {
+      id = att.id,
+      filename = att.filename,
+      -- `content`, not `self`: the latter is the metadata resource.
+      url = att.content,
+      size = att.size,
+      mime = att.mimeType,
+      author = (att.author or {}).displayName,
+      created_at = att.created,
+    }
+  end
+  return out
+end
+
 ---@param raw table
 ---@return issuehub.Issue
 function Jira:_to_issue(raw)
@@ -127,6 +150,7 @@ function Jira:_to_issue(raw)
       -- The API states this directly; no label table to maintain (§4.1).
       closed = (status.statusCategory or {}).key == "done",
     },
+    attachments = attachments_of(f),
     assignee = (f.assignee or {}).displayName,
     reporter = (f.reporter or {}).displayName,
     labels = f.labels or {},
@@ -136,6 +160,18 @@ function Jira:_to_issue(raw)
     closed_at = f.resolutiondate,
     raw = raw,
   })
+end
+
+---The bytes live behind the same auth as the issue.
+---@param att issuehub.Attachment
+---@return issuehub.HttpRequest?
+---@return string? err
+function Jira:attachment_request(att)
+  local auth, err = self:_auth()
+  if not auth then
+    return nil, err
+  end
+  return { url = att.url, auth = auth, net = config.net(self.name) }
 end
 
 ---Fetch ONE page.

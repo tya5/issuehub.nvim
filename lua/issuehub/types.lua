@@ -11,6 +11,15 @@
 ---@field body string
 ---@field created_at string
 
+---@class issuehub.Attachment
+---@field id string          Stable within the issue; also the storage subdirectory.
+---@field filename string    As the tracker reports it; sanitised before use as a path.
+---@field url string         Where the bytes are; fetched with the provider's own auth.
+---@field size integer?      nil when the tracker does not say (a parsed link).
+---@field mime string?
+---@field author string?
+---@field created_at string?
+
 ---@class issuehub.Issue
 ---@field uri string
 ---@field provider string
@@ -25,6 +34,7 @@
 ---@field labels string[]
 ---@field url string?
 ---@field comments issuehub.Comment[]
+---@field attachments issuehub.Attachment[]
 ---@field created_at string
 ---@field updated_at string
 ---@field closed_at string?    When it was resolved; nil while open.
@@ -56,6 +66,9 @@
 ---@field get fun(self, id: string, cb: fun(err: string?, issue: issuehub.Issue?))
 ---@field search fun(self, query: string, cb: fun(err: string?, issues: issuehub.Issue[]?))
 ---@field health fun(self): boolean, string
+---Optional. Returns the HTTP request that fetches one attachment's bytes,
+---including this instance's auth. A provider without it reports no attachments.
+---@field attachment_request (fun(self, att: issuehub.Attachment): issuehub.HttpRequest?, string?)?
 
 ---@class issuehub.PickerCaps
 ---@field preview boolean

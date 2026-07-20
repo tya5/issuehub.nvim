@@ -918,6 +918,37 @@ bodies and commenter names, in Git and in every request to the backend; the
 default is `false` for request size, but disclosure is the bigger reason to
 leave it alone.
 
+### Attachments
+
+```vim
+:IssueHub attachments        " list, pick one, download it
+:IssueHub attachments --all  " every attachment on this issue
+```
+
+**Cache, not workspace.** Files land in `.state/attachments/…`, which is
+git-ignored. A binary can't be removed from Git history once committed, and a
+screenshot pasted into a ticket is often more sensitive than the ticket text —
+so this is the one part of an issue that never becomes a tracked file. Deleting
+`.state/` is still safe: metadata returns with the next sync, bytes re-download.
+
+**Nothing is fetched implicitly.** A sync records that a file exists — the
+issue header shows `Files: 3 (none downloaded)` — and only an explicit request
+transfers anything. Fetching attachments during a sync of twenty thousand
+issues would move gigabytes nobody asked for.
+
+```lua
+attachments = { max_size = 50 * 1024 * 1024 },  -- refuse anything larger
+```
+
+Downloads reuse the instance's credentials, proxy, and TLS settings: an
+attachment is as protected as its issue, and an unauthenticated fetch would
+save a login page that looks like a PDF.
+
+Jira and Redmine report attachments through their APIs, with size and type.
+GitHub and GitLab have none — an upload is a link in the body — so those are
+read out of the body text, and size and type are reported as unknown rather
+than guessed.
+
 ### Bookmarks
 
 ```vim

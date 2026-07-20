@@ -148,6 +148,13 @@ local function render_opts(uri)
       end
       return out
     end)(),
+    attachments_downloaded = (function()
+      local n = 0
+      for _, att in ipairs(require("issuehub.core.attachment").list(uri)) do
+        n = n + (att.downloaded and 1 or 0)
+      end
+      return n
+    end)(),
   }
 end
 

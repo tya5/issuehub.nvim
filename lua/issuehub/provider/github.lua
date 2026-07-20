@@ -97,6 +97,24 @@ local function status_of(raw)
   return { id = "open", name = "Open", closed = false }
 end
 
+---Attachment hosts GitHub uploads to.
+---
+--- There is no attachment API — an upload becomes a link in the body — so this
+--- list is the definition of "attachment" here. Anything else linked in a body
+--- is someone's reference to the web, not a file on the issue.
+---@param url string
+---@return string?
+local function github_asset(url)
+  if
+    url:match("^https://github%.com/user%-attachments/assets/")
+    or url:match("^https://github%.com/[^/]+/[^/]+/files/%d+/")
+    or url:match("^https://[%w%-]*%.?githubusercontent%.com/")
+  then
+    return url
+  end
+  return nil
+end
+
 ---@param raw table
 ---@return issuehub.Issue
 function GitHub:_to_issue(raw)
@@ -130,6 +148,7 @@ function GitHub:_to_issue(raw)
     reporter = (raw.user or {}).login,
     labels = labels,
     url = raw.html_url,
+    attachments = putil.markdown_attachments({ raw.body }, github_asset),
     created_at = raw.created_at,
     updated_at = raw.updated_at,
     -- merged_at for a pull request, closed_at for an issue.
@@ -235,6 +254,18 @@ function GitHub:get(id, cb)
       cb(nil, issue)
     end)
   end)
+end
+
+---@param att issuehub.Attachment
+---@return issuehub.HttpRequest?
+---@return string? err
+--- One wrinkle worth knowing: a private-repository asset redirects to a signed
+--- storage URL on another host, and curl drops the Authorization header across
+--- hosts (deliberately — it must not leak the token to a CDN). The signature
+--- carries the authorisation instead, so this works; when GitHub declines to
+--- issue one, the download fails loudly rather than saving a login page.
+function GitHub:attachment_request(att)
+  return putil.attachment_request(self:_ctx(), att.url)
 end
 
 ---@return boolean ok

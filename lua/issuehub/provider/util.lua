@@ -66,6 +66,73 @@ function M.call(ctx, path, opts, cb)
   end)
 end
 
+---Extract attachments from Markdown link syntax.
+---
+--- GitHub and GitLab have no attachment API: an upload becomes a link in the
+--- issue body or a comment, and that link is the only record of it. So the body
+--- is where the list has to come from, with two consequences worth stating —
+--- **size and MIME type are unknown** (nil, not guessed), and a link the user
+--- typed by hand to an unrelated file on the same host is indistinguishable
+--- from an upload. `matches` decides what counts.
+---@param texts string[]                       Description and comment bodies.
+---@param matches fun(url: string): string?    Returns the absolute URL, or nil to skip.
+---@return table[]
+function M.markdown_attachments(texts, matches)
+  local out, seen = {}, {}
+
+  for _, text in ipairs(texts) do
+    -- Both ![alt](url) and [label](url); the leading ! is not captured, so one
+    -- pattern covers images and file links alike.
+    for label, url in tostring(text or ""):gmatch("%[([^%]]*)%]%(([^%s%)]+)%)") do
+      local resolved = matches(url)
+      if resolved and not seen[resolved] then
+        seen[resolved] = true
+        -- Prefer a filename from the URL; fall back to the link text, which is
+        -- what GitHub shows for its opaque asset URLs.
+        local tail = resolved:gsub("[?#].*$", ""):match("([^/]+)$") or ""
+        local filename = tail:match("%.%w+$") and tail or nil
+        if not filename and label ~= "" then
+          filename = label
+        end
+        out[#out + 1] = {
+          -- The URL is the only stable identity available; a hash of it keeps
+          -- the id short and filesystem-safe. Truncated because it names a
+          -- directory, not because collisions are acceptable elsewhere.
+          id = vim.fn.sha256(resolved):sub(1, 12),
+          filename = filename or ("attachment-" .. vim.fn.sha256(resolved):sub(1, 8)),
+          url = resolved,
+        }
+      end
+    end
+  end
+
+  return out
+end
+
+---Build the request that fetches an attachment's bytes.
+---
+--- Same credentials and the same proxy/TLS block as any other call: an
+--- attachment link is exactly as protected as the issue it hangs off, and an
+--- unauthenticated GET against a private tracker returns a login page that
+--- would then sit on disk pretending to be a PDF.
+---@param ctx issuehub.ProviderCtx
+---@param url string
+---@return issuehub.HttpRequest?
+---@return string? err
+function M.attachment_request(ctx, url)
+  local token, terr = config.token(ctx.name)
+  if not token then
+    return nil, terr
+  end
+  local credentials = ctx.auth(token)
+  return {
+    url = url,
+    auth = credentials.auth,
+    headers = credentials.headers,
+    net = config.net(ctx.name),
+  }
+end
+
 ---Percent-encode a value for use in a single URL path segment.
 ---
 --- Distinct from issue.encode_id: that one produces a *storage* key, this one

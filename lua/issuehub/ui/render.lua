@@ -138,6 +138,18 @@ function M.issue(issue, entry, overlay, opts)
     if opts.translations and #opts.translations > 0 then
       push(("- Translated: %s"):format(table.concat(opts.translations, ", ")))
     end
+    if #(issue.attachments or {}) > 0 then
+      -- The count only; the files themselves are not fetched until asked for,
+      -- and the header is exactly where you learn there is something to ask
+      -- for.
+      local downloaded = opts.attachments_downloaded or 0
+      push(
+        ("- Files:    %d  (%s — `:IssueHub attachments`)"):format(
+          #issue.attachments,
+          downloaded > 0 and (downloaded .. " downloaded") or "none downloaded"
+        )
+      )
+    end
     if opts.changed_since_seen then
       -- Surfaced in the header rather than as a notification: it is a property
       -- of this issue, and it should still be visible an hour later.

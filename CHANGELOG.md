@@ -10,6 +10,26 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ### Added
 
+- **Attachments.** `:IssueHub attachments` lists what an issue has and downloads
+  the one you pick (`--all` for every one); the issue header gained a `Files:`
+  line so you can see there is something to ask for. Jira and Redmine report
+  them through their APIs; GitHub and GitLab have no attachment API, so those
+  are read out of the body's Markdown links and their size and type are
+  reported as unknown rather than guessed.
+  - **Cache, never workspace.** They live under git-ignored `.state/`: a binary
+    cannot be removed from Git history once committed, and a screenshot pasted
+    into a ticket is often more sensitive than the ticket text.
+  - **Nothing is fetched implicitly** — a sync records that a file exists and
+    transfers nothing. `attachments.max_size` (default 50 MB) refuses the rest.
+  - Bytes never pass through a Lua string: curl writes the file itself, to
+    `<dest>.part` renamed on success, because the JSON path reads stdout as text
+    and splits a status code off the end — either would corrupt a PNG.
+  - Tracker-supplied filenames are reduced to one path segment before use, so
+    an attachment named `../../../.ssh/authorized_keys` cannot escape; two
+    attachments sharing a name get separate directories instead of overwriting.
+
+### Added
+
 - **Import.** `:IssueHub import <file>` merges an exported CSV or JSON back into
   the workspace, so a triage pass done in a spreadsheet can come home. Only the
   local half is merged — `memo`, `meta.*`, `bookmarked`; the issue columns are

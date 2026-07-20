@@ -309,6 +309,92 @@ function M.request(req, cb)
   pump()
 end
 
+---Fetch a URL straight to a file.
+---
+--- Separate from `request()` rather than an option on it, because the response
+--- must never become a Lua string: attachments are binary, and `execute()`
+--- reads stdout with `text = true` and splits the trailing status code off the
+--- body. Both would corrupt a PNG. Here curl writes the bytes itself and only
+--- the status code comes back through stdout.
+---
+--- Writes to `<dest>.part` and renames on success, so an interrupted download
+--- never leaves a truncated file that looks complete — the same
+--- temp-then-rename rule the workspace writes follow.
+---@param req issuehub.HttpRequest
+---@param dest string             Absolute path to write.
+---@param opts { max_size: integer? }?
+---@param cb fun(err: string?, path: string?)
+function M.download(req, dest, opts, cb)
+  opts = opts or {}
+  if req.net == nil then
+    local ok, config = pcall(require, "issuehub.config")
+    req.net = ok and config.net(nil) or {}
+  end
+
+  queue[#queue + 1] = function()
+    local net = req.net or {}
+    local timeout = req.timeout or net.timeout or 300000
+    local part = dest .. ".part"
+    local conf = M._build_config(req)
+
+    local cmd = {
+      "curl",
+      "--silent",
+      "--show-error",
+      "--fail",
+      "--location",
+      "--max-time",
+      tostring(math.ceil(timeout / 1000)),
+      "--output",
+      part,
+      "--write-out",
+      "%{http_code}",
+    }
+    if opts.max_size and opts.max_size > 0 then
+      -- Refuses before transferring when the server declares a size; aborts
+      -- mid-transfer otherwise. Either way the .part file is discarded below.
+      vim.list_extend(cmd, { "--max-filesize", tostring(opts.max_size) })
+    end
+    -- The config (credentials, proxy, TLS) is read from stdin, never argv.
+    vim.list_extend(cmd, { "--config", "-", req.url })
+
+    log.debug("download", req.url, "->", dest)
+
+    local ok, err = pcall(vim.system, cmd, { stdin = conf, text = true }, function(out)
+      vim.schedule(function()
+        release()
+        local status = tonumber(vim.trim(out.stdout or "")) or 0
+
+        if out.code ~= 0 or status >= 400 then
+          vim.uv.fs_unlink(part)
+          local msg = vim.trim(out.stderr or "")
+          if out.code == 63 then
+            msg = ("file is larger than the %d byte limit"):format(opts.max_size or 0)
+          elseif status >= 400 then
+            msg = ("HTTP %d"):format(status)
+          end
+          return cb(("download failed: %s"):format(msg ~= "" and msg or ("curl exit " .. out.code)))
+        end
+
+        local ok_rename, rerr = vim.uv.fs_rename(part, dest)
+        if not ok_rename then
+          vim.uv.fs_unlink(part)
+          return cb(("could not move the download into place: %s"):format(tostring(rerr)))
+        end
+        cb(nil, dest)
+      end)
+    end)
+
+    if not ok then
+      release()
+      vim.schedule(function()
+        cb("failed to spawn curl: " .. tostring(err))
+      end)
+    end
+  end
+  pump()
+end
+
 ---Whether curl is usable. Reported by :checkhealth.
 ---@return boolean ok
 ---@return string msg

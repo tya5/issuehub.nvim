@@ -73,6 +73,24 @@ function Redmine:_ensure_statuses(cb)
 end
 
 ---@param raw table
+---@return table[]
+local function attachments_of(raw)
+  local out = {}
+  for _, att in ipairs(raw.attachments or {}) do
+    out[#out + 1] = {
+      id = att.id,
+      filename = att.filename,
+      url = att.content_url,
+      size = att.filesize,
+      mime = att.content_type,
+      author = (att.author or {}).name,
+      created_at = att.created_on,
+    }
+  end
+  return out
+end
+
+---@param raw table
 ---@return issuehub.Issue
 function Redmine:_to_issue(raw)
   local status = raw.status or {}
@@ -126,8 +144,16 @@ function Redmine:_to_issue(raw)
     updated_at = raw.updated_on,
     closed_at = raw.closed_on,
     comments = comments,
+    attachments = attachments_of(raw),
     raw = raw,
   })
+end
+
+---@param att issuehub.Attachment
+---@return issuehub.HttpRequest?
+---@return string? err
+function Redmine:attachment_request(att)
+  return putil.attachment_request(self:_ctx(), att.url)
 end
 
 ---@param query table|string|nil
@@ -207,7 +233,9 @@ end
 function Redmine:get(id, cb)
   self:_ensure_statuses(function()
     putil.call(self:_ctx(), ("/issues/%s.json"):format(putil.path_segment(id)), {
-      query = { include = "journals" },
+      -- Both are opt-in on Redmine; without `attachments` the array is simply
+      -- absent, which is indistinguishable from an issue that has none.
+      query = { include = "journals,attachments" },
     }, function(err, body)
       if err then
         return cb(err)
