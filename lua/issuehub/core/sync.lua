@@ -23,6 +23,12 @@ local M = {}
 ---Fields compared field-by-field. Ordered for display.
 local WATCHED = { "status", "assignee", "title", "description", "labels" }
 
+---Fields a `partial` cache entry cannot hold, because list/search do not return
+---them (§7). Comparing these against a partial baseline reports the *filling in*
+---of the entry as a change — every issue at once, on the first sync after a
+---fetch.
+local ABSENT_FROM_PARTIAL = { description = true }
+
 ---Change detection compares the watched fields directly rather than hashing.
 ---
 --- An earlier design used `updated_at` with a content hash as a fallback. Direct
@@ -44,25 +50,41 @@ end
 ---@param old issuehub.Issue?
 ---@param new issuehub.Issue
 ---@return issuehub.Change? change  nil when nothing we report on moved.
-function M.diff(old, new)
+---@param old issuehub.Issue?
+---@param new issuehub.Issue
+---@param opts { partial_baseline: boolean? }?  Baseline came from list/search.
+---@return issuehub.Change?
+function M.diff(old, new, opts)
   if not old then
     return nil -- Newly cached; not a "change" the user needs to review.
   end
+  opts = opts or {}
 
   local fields = {}
   for _, field in ipairs(WATCHED) do
-    local before = field == "status" and old.status.name or old[field]
-    local after = field == "status" and new.status.name or new[field]
-    if differs(before, after) then
-      fields[#fields + 1] = field
+    -- A partial baseline is a real baseline for everything it actually holds.
+    -- Discarding it wholesale (the previous behaviour) avoided the false
+    -- positives but also silently missed a genuine status change between the
+    -- list and the sync; skipping only the fields it cannot hold keeps both.
+    if not (opts.partial_baseline and ABSENT_FROM_PARTIAL[field]) then
+      local before = field == "status" and old.status.name or old[field]
+      local after = field == "status" and new.status.name or new[field]
+      if differs(before, after) then
+        fields[#fields + 1] = field
+      end
     end
   end
 
   -- Comment counts come from the provider's total where available, since the
   -- fetched list is capped (§23.3) and its length would understate the change.
-  local before_total = (old.raw or {}).comment_total or #(old.comments or {})
-  local after_total = (new.raw or {}).comment_total or #(new.comments or {})
-  local added = math.max(0, (after_total or 0) - (before_total or 0))
+  -- A partial baseline has no comment information at all, so any delta computed
+  -- from it would be the whole count reported as "added".
+  local added = 0
+  if not opts.partial_baseline then
+    local before_total = (old.raw or {}).comment_total or #(old.comments or {})
+    local after_total = (new.raw or {}).comment_total or #(new.comments or {})
+    added = math.max(0, (after_total or 0) - (before_total or 0))
+  end
 
   if #fields == 0 and added == 0 then
     return nil
@@ -106,14 +128,15 @@ function M.one(uri, cb)
   end
 
   local before = cache.get(uri)
-  local old = before and not before.partial and before.issue or nil
+  local old = before and before.issue or nil
+  local partial_baseline = before ~= nil and before.partial == true
 
   provider:get(id, function(err, issue)
     if err then
       return cb(err)
     end
 
-    local change = M.diff(old, issue)
+    local change = M.diff(old, issue, { partial_baseline = partial_baseline })
     local ok, werr = cache.put(issue)
     if not ok then
       return cb(werr)

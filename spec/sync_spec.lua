@@ -251,3 +251,58 @@ describe("sync.targets", function()
     assert.equals(1, #sync.targets())
   end)
 end)
+
+describe("partial baselines", function()
+  before_each(function()
+    fresh()
+  end)
+
+  local function partial_then(remote)
+    -- What list/fetch writes: no description, no comments.
+    cache.put_all({ make({ description = "" }) })
+    provider.remote = remote
+    return helpers.sync(function(cb)
+      sync.one(URI, cb)
+    end)
+  end
+
+  it("does not report the description filling in as a change", function()
+    -- The first sync after a fetch reported EVERY issue as changed, because the
+    -- partial entry's empty description differed from the real body. Measured
+    -- against live data: 100 changed on the first run, 0 on the second.
+    assert.is_nil(partial_then(make()))
+  end)
+
+  it("still catches a real status change on top of the fill-in", function()
+    -- The previous fix discarded the partial baseline entirely, which removed
+    -- the false positives but also lost this.
+    local change = partial_then(make({ status = { id = "2", name = "Done", closed = true } }))
+    assert.truthy(change)
+    assert.same({ "status" }, change.fields)
+    assert.equals("Open", change.previous_status)
+    assert.equals("Done", change.status)
+  end)
+
+  it("catches assignee, title, and label changes against a partial baseline", function()
+    local change = partial_then(make({ assignee = "alice", title = "renamed", labels = { "cache", "urgent" } }))
+    assert.truthy(change)
+    table.sort(change.fields)
+    assert.same({ "assignee", "labels", "title" }, change.fields)
+  end)
+
+  it("reports no comment delta against a partial baseline", function()
+    -- A partial holds no comment information, so any delta would be the whole
+    -- count reported as newly added.
+    local change = partial_then(make({ raw = { comment_total = 12 } }))
+    assert.is_nil(change)
+  end)
+
+  it("still counts comments once the baseline is complete", function()
+    cache.put(make({ raw = { comment_total = 10 } }))
+    provider.remote = make({ raw = { comment_total = 13 } })
+    local change = helpers.sync(function(cb)
+      sync.one(URI, cb)
+    end)
+    assert.equals(3, change.comments_added)
+  end)
+end)

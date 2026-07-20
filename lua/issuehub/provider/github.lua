@@ -73,13 +73,20 @@ local function status_of(raw)
   local state = raw.state or "open"
 
   if is_pr then
+    -- Order matters, and this order is load-bearing: draft is a SUB-state of
+    -- open, not a state of its own. Checking it before `state` reported a
+    -- closed-without-merging draft as open — with a closed_at set, so the issue
+    -- contradicted itself. Found against live data on cli/cli.
     if raw.merged_at then
       return { id = "merged", name = "Merged", closed = true }
+    end
+    if state == "closed" then
+      return { id = "closed", name = "Closed", closed = true }
     end
     if raw.draft then
       return { id = "draft", name = "Draft", closed = false }
     end
-    return { id = state, name = state == "closed" and "Closed" or "Open", closed = state == "closed" }
+    return { id = "open", name = "Open", closed = false }
   end
 
   if state == "closed" then

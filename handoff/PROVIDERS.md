@@ -107,7 +107,13 @@ provider stashes the true total in `raw.comment_total` so sync can report
   `repository_url` or `html_url`.
 - **`closed`/status name**: issues → Open / Closed / `Closed (not planned)` (from
   `state_reason == "not_planned"`). PRs → Open / Draft / Merged / Closed.
-  `closed` follows `state == "closed"`, with Merged also closed and Draft open.
+- **PR state precedence is load-bearing — check in this order:**
+  `merged_at` → `state == "closed"` → `draft` → open. **Draft is a SUB-state of
+  open, not a state of its own.** Testing `draft` first reports a draft closed
+  without merging as open while it still carries `closed_at` — an issue that
+  contradicts itself. This wording previously said only "Draft open", which
+  permitted exactly that bug; it was found against live data (cli/cli) and
+  existed in the Lua reference implementation too.
 - **`closed_at`**: `merged_at` (PR) else `closed_at`.
 - **Comments**: `/repos/<repo>/issues/<n>/comments` — fetch the **last** page
   (`page = ceil(total/limit)`) to get the newest; `raw.comment_total = raw.comments`.

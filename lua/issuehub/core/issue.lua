@@ -91,9 +91,25 @@ function M.status(status)
 end
 
 ---Fill in every field so downstream code never has to nil-check.
+---
+--- Enforces one cross-provider invariant: **`closed_at` exists only when
+--- `status.closed`**. Trackers do not agree on clearing their resolution
+--- timestamp when an issue is reopened (Jira's `resolutiondate` and Redmine's
+--- `closed_on` can persist), and a status-ordering bug can produce the same
+--- contradiction — a live GitHub draft PR closed without merging arrived as
+--- open *and* carrying `closed_at`. Normalising here fixes it for every
+--- provider at once, including ones not written yet, rather than four times.
 ---@param issue table
 ---@return issuehub.Issue
 function M.normalize(issue)
+  local status = M.status(issue.status)
+  -- Only meaningful once closed; nil is the honest value while open, and an
+  -- empty cell is what a spreadsheet wants for "not yet".
+  local closed_at = nil
+  if status.closed and issue.closed_at then
+    closed_at = M.timestamp(issue.closed_at)
+  end
+
   return {
     uri = issue.uri or M.uri(issue.provider, issue.id),
     provider = issue.provider,
@@ -103,7 +119,7 @@ function M.normalize(issue)
     id = tostring(issue.id),
     title = issue.title or "",
     description = issue.description or "",
-    status = M.status(issue.status),
+    status = status,
     assignee = issue.assignee,
     reporter = issue.reporter,
     labels = issue.labels or {},
@@ -111,9 +127,7 @@ function M.normalize(issue)
     comments = issue.comments or {},
     created_at = M.timestamp(issue.created_at),
     updated_at = M.timestamp(issue.updated_at),
-    -- Only meaningful once closed; nil is the honest value while open, and an
-    -- empty cell is what a spreadsheet wants for "not yet".
-    closed_at = issue.closed_at and M.timestamp(issue.closed_at) or nil,
+    closed_at = closed_at,
     raw = issue.raw or {},
   }
 end

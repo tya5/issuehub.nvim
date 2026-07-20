@@ -23,6 +23,20 @@ suite.** They are the difference between a port and a regression.
   the same prompt-hang reason.
 - **Health reports resolvability, never the value** ("resolved (40 characters)").
 
+## Cross-provider invariants
+
+- **`closed_at` exists only when `status.closed`.** Enforce it in the canonical
+  normaliser, not per provider: trackers disagree about clearing their
+  resolution timestamp on reopen (Jira `resolutiondate`, Redmine `closed_on` can
+  persist), and a status-ordering bug produces the same contradiction. Found
+  live on GitHub — a draft PR closed without merging read as open *and* carried
+  `closed_at`. An open issue with a resolution timestamp silently corrupts any
+  duration analysis built on those two columns, so this is a data-integrity
+  invariant, not a tidiness one. Test it parameterised over every provider so a
+  fifth one inherits the check.
+- **PR/issue state precedence** (GitHub): `merged_at` → closed → draft → open.
+  See PROVIDERS.md.
+
 ## Timestamps
 
 - Normalise every provider timestamp to `YYYY-MM-DDTHH:MM:SSZ` UTC on ingest.
@@ -39,6 +53,18 @@ suite.** They are the difference between a port and a regression.
      an issue from the picker and its description is permanently blank.)
   2. A partial entry is **always stale** regardless of `fetched_at`, so opening
      it triggers a real `get`.
+  3. **Sync must not compare a partial baseline's absent fields.** `description`
+     is empty in a partial, so comparing it reports the entry *filling in* as a
+     change — every issue at once, on the first sync after a fetch (measured
+     live: 100 changed on the first run, 0 on the second). Since `fetch` is the
+     intended way to populate the cache, this makes the feature meaningless the
+     first time a user reaches for it. Skip only the fields a partial cannot
+     hold (`description`, and the comment delta); keep comparing `status`,
+     `assignee`, `title`, and `labels`, which a partial *does* carry — otherwise
+     a genuine status change between the list and the sync is silently lost.
+     Discarding the whole baseline avoids the false positives and causes that
+     second bug; the Lua reference had exactly that weaker behaviour until the
+     Python port surfaced it.
 
 ## Change detection (sync)
 

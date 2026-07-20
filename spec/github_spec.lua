@@ -238,3 +238,46 @@ describe("pagination", function()
     assert.equals(1000, #issues)
   end)
 end)
+
+describe("pull request state ordering", function()
+  local function status_of(overrides)
+    helpers.configure("github", { token_env = "SPEC_GH" })
+    vim.env.SPEC_GH = "t"
+    local p = github.new()
+    p.http = helpers.fake_http({})
+    p:setup(require("issuehub.config").get().providers.github)
+    return p:_to_issue(vim.tbl_deep_extend("force", vim.deepcopy(ISSUE), overrides))
+  end
+
+  it("reports a draft closed without merging as Closed, not Draft", function()
+    -- Found against live data (cli/cli): checking `draft` before `state` made a
+    -- closed draft read as open while still carrying closed_at — an issue that
+    -- contradicted itself. Draft is a sub-state of open, not a state.
+    local issue = status_of({
+      pull_request = {},
+      draft = true,
+      state = "closed",
+      closed_at = "2026-07-01T10:00:00Z",
+    })
+    assert.equals("Closed", issue.status.name)
+    assert.is_true(issue.status.closed)
+    assert.equals("2026-07-01T10:00:00Z", issue.closed_at)
+  end)
+
+  it("still reports an open draft as Draft", function()
+    local issue = status_of({ pull_request = {}, draft = true, state = "open" })
+    assert.equals("Draft", issue.status.name)
+    assert.is_false(issue.status.closed)
+  end)
+
+  it("prefers Merged over both", function()
+    local issue = status_of({
+      pull_request = {},
+      draft = true,
+      state = "closed",
+      merged_at = "2026-07-01T10:00:00Z",
+    })
+    assert.equals("Merged", issue.status.name)
+    assert.is_true(issue.status.closed)
+  end)
+end)
