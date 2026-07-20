@@ -19,6 +19,10 @@ This project is pre-1.0: the public API may break between minor versions until
     because the workspace is a Git repo: the report names every issue whose
     content was replaced, `--dry-run` previews it, and the command warns when
     the workspace is *not* under Git and the undo therefore does not exist.
+  - The export→import round trip is a no-op only when `metadata.yaml` is absent
+    or already canonical (sorted keys, no comments). A hand-ordered file
+    legitimately reports an overwrite — claiming "unchanged" for a write that
+    reorders your keys would be the real bug.
   - `metadata.yaml` comments cannot survive an import (the file is regenerated
     from merged keys), so the report counts the issues where they were lost
     rather than letting it happen quietly.
@@ -39,6 +43,12 @@ This project is pre-1.0: the public API may break between minor versions until
     than sanitised.
   - The backend contract's `kind` dispatch, built in 0.1.0 for exactly this,
     absorbed the new request type without changing the interface.
+  - Documented what committing these files discloses (`:h
+    issuehub-disclosure`): a translation is the issue's title and description,
+    not a summary, so it puts tracker content in Git — and
+    `include_comments = true` adds comment bodies and commenter names, both to
+    Git and to every backend request. The default was `false` for request size;
+    disclosure is the better reason.
 
 ### Added
 

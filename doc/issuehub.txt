@@ -622,6 +622,27 @@ searchable with `:IssueHub find`.
 Requires a backend; with the default `none`, `translate` reports that and does
 nothing. |issuehub-backends|
 
+                                                     *issuehub-disclosure*
+What ends up in Git, and what leaves the machine ~
+
+These files are meant to be committed, so it is worth knowing what committing
+them says. A translation is the issue's own title and description restated in
+another language — not a summary — so translating writes tracker content into
+your repository's history. An analysis response can quote the issue just as
+freely. And the directory names alone (`<provider>/<id>/`, and the URI lists
+in collections) already disclose which issues you follow, whatever the files
+contain.
+
+`include_comments = true` widens this: every comment is sent to the backend as
+`Comment by <author>`, so comment bodies and commenter names land in the saved
+translation, and therefore in Git. The default is `false` because comments can
+dominate the request on a busy issue — a cost reason — but the disclosure is
+the better reason to leave it off.
+
+Generation is the only step that sends anything anywhere. `.state/` is
+git-ignored and derived, but `translations/` and `analyses/` are neither: they
+exist because a backend was given the issue.
+
 ==============================================================================
 13. CORPORATE NETWORKS                                   *issuehub-network*
 

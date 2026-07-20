@@ -218,6 +218,28 @@ describe("import: json and round-trip", function()
     assert.equals("line one\nline two, with a comma", overlay.read(URI).memo)
   end)
 
+  it("reports a change when the existing metadata.yaml is not canonical", function()
+    -- The round-trip is a no-op only when metadata.yaml is absent or already
+    -- canonical (sorted keys, no comments). Import regenerates the file, so a
+    -- hand-ordered one legitimately reports an overwrite — claiming "unchanged"
+    -- for a write that reorders the user's keys would be the actual bug.
+    -- corpus: import_merge_metadata_key_reorder_counts_as_overwrite
+    overlay.write(URI, { metadata = "zebra: 1\nalpha: 2" })
+    cache.put(make("PROJ-1"))
+
+    local view = require("issuehub.ui.view").new({
+      label = "rt",
+      items = { issue_mod.to_item(cache.get(URI).issue) },
+    })
+    local csv = assert(export.write("csv", view, { path = vim.fn.tempname() .. ".csv" }))
+
+    local result = assert(importer.run(csv))
+    assert.same({ URI }, result.imported)
+    assert.equals("metadata", result.overwritten[1].field)
+    -- Same keys, same values — only the order moved.
+    assert.same({ alpha = "2", zebra = "1" }, overlay.metadata(URI))
+  end)
+
   it("survives a multi-line memo through the csv round-trip", function()
     local memo = "調査メモ\n\n- 認証まわり\n- 次: staging"
     overlay.write(URI, { memo = memo })

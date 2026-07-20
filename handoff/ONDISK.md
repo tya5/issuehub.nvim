@@ -189,6 +189,69 @@ last_seen_updated_at: 2026-07-18T22:04:11Z
 Written only when there is something to record; if all fields are default/empty,
 delete the file. Keys sorted on write for clean diffs.
 
+## What lands in Git, and what leaves the machine
+
+This section exists because it is easy to read "`.state/` is derived and
+git-ignored" and conclude that issue content never reaches Git — that was true
+of this layout once, and it is no longer true. What follows is a plain
+inventory, not an argument for or against the design; see §Analyses and
+§Translations below for the files themselves.
+
+**Which issues you track is in Git regardless of content.** A tracked issue's
+directory name is `<provider>/<encoded-id>/` (§URI grammar and path encoding),
+and a collection's `issues:` list in `collection.yaml` (§Collections) is a list
+of issue URIs. Both are ordinary tracked files. Even a workspace with empty
+`memo.md`, no `analyses/`, and no `translations/` still discloses, to anyone who
+can read the repository, exactly which issues from which providers/projects you
+are following.
+
+**Issue content itself lands in Git through two Git-tracked, generated files,
+both deliberately so:**
+
+- **`translations/<lang>.md`** (§Translations below). Its frontmatter `title` is
+  the translated *issue title*, and its body is the translated *issue
+  description* — this is not a summary or a pointer, it is the issue's own
+  content restated in another language. It is Git-tracked and hand-correctable
+  on purpose: a translation that only a cache could hold could never be fixed by
+  hand and would not survive a cache wipe, which defeats the point of correcting
+  it at all. Tracking it in Git is what makes hand-correction durable.
+- **`analyses/<stamp>/response.md`** (§Analyses below). An analysis is prose
+  *about* the issue, generated on request, and prose about an issue routinely
+  quotes it — a title, a description excerpt, a comment being reasoned about.
+  Nothing prevents a response from reproducing issue content verbatim if that is
+  what answering the prompt required.
+
+**Comments can be included too, and that is opt-in — but the setting's own
+documented reason for defaulting off is not about disclosure.** The plugin's
+translation request builder (`core/translation.lua:request`) accepts an
+`include_comments` option, sourced from the `translate.include_comments` config
+key (`config.lua`), which **defaults to `false`**. When it is turned on, every
+comment on the issue is added to the request as a separate document named
+`Comment by <author>` — so, if that translation is then saved, **both the
+comment body and the commenter's name** end up in `translations/<lang>.md`, and
+therefore in Git, alongside the translated title and description.
+
+The config default's own comment says why it is `false`: *"comments can dominate
+the request on busy issues"* — a request-size/cost concern, not a disclosure
+concern. That is true and sufficient on its own terms, but reading only that
+rationale can leave the impression that the only thing `include_comments: true`
+costs is token spend. It does not: turning it on also widens both **what is sent
+to the AI backend** on every translation request for that issue, and **what is
+permanently recorded in Git** once the result is saved — including the names of
+commenters, who did not necessarily choose to have their comments translated or
+transmitted.
+
+**Generation is where content leaves the machine.** Neither a translation nor an
+analysis is produced by the CLI — both come from an AI backend that receives the
+request (issue title/description, and comments if `include_comments` is on) and
+returns prose. The CLI does not talk to that backend; it only reads, indexes,
+and validates the files the backend's caller wrote. But the workspace the CLI
+reads is the same workspace that output lands in, so anyone deciding whether a
+given workspace is safe to keep as-is needs to know that its `translations/` and
+`analyses/` trees are not purely local artifacts — producing them sent the
+underlying issue content (and, if enabled, comment bodies and authorship) to
+wherever that backend runs.
+
 ## Analyses (owned by the nvim side, but the CLI must not disturb them)
 
 `analyses/<YYYY-MM-DDTHH-MM-SSZ>/` (dashes in the time, `:` is illegal on
@@ -196,12 +259,16 @@ Windows; sorts lexicographically). Each holds `prompt.md`, `response.md`, and
 `metadata.yaml` (`created_at`, `backend`, `model`, `issue_updated_at`,
 `prompt_source`). **Staleness is derived**, never stored: current iff
 `metadata.issue_updated_at == cached issue.updated_at`. The CLI indexes analysis
-prose into FTS but otherwise leaves this tree to the plugin.
+prose into FTS but otherwise leaves this tree to the plugin. An analysis
+response is generated prose that can quote the issue verbatim, and it is
+Git-tracked — see §What lands in Git, and what leaves the machine above.
 
 ## Translations (nvim-generated, CLI must not disturb — but does index)
 
 `translations/<lang>.md`, one file per language, tracked in Git and meant to be
-hand-corrected when the model gets it wrong. Frontmatter, then the body:
+hand-corrected when the model gets it wrong. The frontmatter `title` and the
+body are the issue's own title and description translated, not a summary — see
+§What lands in Git, and what leaves the machine above. Frontmatter, then the body:
 
 ```markdown
 ---

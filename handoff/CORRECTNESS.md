@@ -189,8 +189,24 @@ suite.** They are the difference between a port and a regression.
 - The CSV reader must handle everything the writer emits: quoted fields with
   embedded commas, **embedded newlines** (multi-line memos are the common case),
   and doubled quotes. A trailing newline must not produce a final empty record.
-- **Round-trip invariant, worth a corpus entry:** exporting and immediately
-  importing changes nothing — every row `unchanged`, zero `imported`.
+- **Round-trip invariant, held in the corpus — conditional on `metadata.yaml`
+  being canonical.** Exporting a subject and immediately importing that same
+  file back changes nothing — every row `unchanged`, zero `imported` — **when
+  the existing `metadata.yaml` is absent, or already in the canonical
+  (sorted-key, comment-free) form** the previous bullet describes. That
+  precondition is the normal case for a file `import` never touched, but not a
+  given in general: `metadata.yaml` is otherwise written back verbatim
+  specifically so a human can hand-edit key order and leave comments in it, and
+  `import` regenerates the file from the merged key set — sorted, comment-free —
+  every time. So a non-canonical `metadata.yaml` legitimately reports a change
+  on re-import: `overwritten` on `metadata` when only key order moved, plus
+  `metadata_comments` when a comment would be dropped. This is not a defect in
+  the invariant — reporting `unchanged` for a write that would silently discard
+  a comment or reorder keys would be the actual bug; the invariant holds exactly
+  where nothing about the file *would* change, and reports honestly everywhere
+  else. Corpus: `import_merge_export_then_import_is_a_no_op`,
+  `import_merge_metadata_key_reorder_counts_as_overwrite`,
+  `import_merge_metadata_comment_loss_reported`.
 
 ## Repository / paths
 

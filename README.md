@@ -909,6 +909,15 @@ from, and the issue header shows `ja (current)` or `ja (outdated)` — derived, 
 User-triggered only, and it needs a backend: with the default `none`, nothing is
 sent anywhere.
 
+Worth knowing before you enable one, since the point of these files is that they
+are committed: a translation **is the issue's own title and description**, not a
+summary, so translating puts tracker content into your Git history — where an
+analysis can also quote it, and where the directory names already disclose which
+issues you follow regardless. `include_comments = true` widens that to comment
+bodies and commenter names, in Git and in every request to the backend; the
+default is `false` for request size, but disclosure is the bigger reason to
+leave it alone.
+
 ### Bookmarks
 
 ```vim
