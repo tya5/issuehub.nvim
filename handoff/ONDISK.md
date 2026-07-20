@@ -133,6 +133,33 @@ by search.
   §Partial cache). A partial entry is always treated as stale.
 - Written **without fsync** (derived, rebuildable). Atomic via temp+rename.
 
+## Locking
+
+Implemented (`core/lock.lua`), matching the CLI's `docs/FORMATS.md` §Locking
+wire format: `O_CREAT|O_EXCL` lock files under `.state/lock/{subject,cache,
+lists}/`, the same owner payload (`pid`, `hostname`, `acquired_at`,
+`operation`), the same names, the same never-auto-break rule, plus the
+optimistic content re-check for writers that cannot take a lock at all.
+
+Notes specific to this side, for anyone comparing the two:
+
+- The atomic primitive is `vim.uv.fs_open(path, "wx", 420)` — libuv exposes
+  `O_CREAT|O_EXCL` directly, so no `luaposix` and no rename-based test-and-set
+  is needed. `io.open(path, "w")` is **not** usable: it truncates
+  unconditionally.
+- Acquisition is **re-entrant within a process**, reference-counted per path.
+  Not an embellishment: `import` holds a subject lock and calls `overlay.write`,
+  which takes the same one — without re-entrancy that is a process waiting ten
+  seconds for itself and then failing.
+- The liveness probe in a timeout message is diagnostic text only. `uv.kill`
+  reports failure by *returning* nil rather than raising, so a `pcall` around it
+  succeeds for a dead pid; checking only `pcall`'s result describes every stale
+  lock as live. (Found by testing it against a nonexistent pid.)
+- The optimistic check takes the caller's baseline where there is one: an issue
+  buffer records what the overlay held when it was rendered, and refuses to save
+  over an edit made since. An hour-old buffer is the realistic window, and no
+  lock covers it.
+
 ## Attachments (cache — deliberately NOT in the workspace)
 
 `.state/attachments/<provider>/<encoded-id>/<encoded-attachment-id>/<filename>`.

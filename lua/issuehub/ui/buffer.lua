@@ -290,6 +290,10 @@ local function paint(buf, result, uri)
   tracked[buf].uri = uri
   tracked[buf].readonly = vim.list_slice(result.lines, 1, result.readonly_until)
   tracked[buf].last_good = result.lines
+  -- What the overlay held when this buffer was rendered. A buffer open for an
+  -- hour is the realistic window for someone else's edit to be overwritten,
+  -- and the lock cannot help there: an editor never takes one.
+  tracked[buf].baseline = overlay_mod.read(uri)
 end
 
 ---Write the editable regions back. Bound to BufWriteCmd.
@@ -313,11 +317,14 @@ function M.save(buf)
     end
   end
 
-  local written, werr = overlay_mod.write(state.uri, content)
+  local written, werr = overlay_mod.write(state.uri, content, { baseline = state.baseline })
   if werr then
     vim.notify("issuehub: save failed — " .. werr, vim.log.levels.ERROR)
     return false
   end
+
+  -- The buffer now matches disk, so the next save compares against this.
+  state.baseline = overlay_mod.read(state.uri)
 
   vim.bo[buf].modified = false
 

@@ -9,6 +9,7 @@
 --- metadata.yaml survive untouched. `parsed()` exists for reading only.
 
 local fs = require("issuehub.util.fs")
+local lock = require("issuehub.core.lock")
 local repository = require("issuehub.core.repository")
 local yaml = require("issuehub.util.yaml")
 
@@ -57,13 +58,50 @@ end
 ---
 --- Writing unconditionally would touch mtimes and produce empty Git diffs on
 --- every `:w`, which matters because this directory is meant to be committed.
+---
+--- Holds the subject lock for the whole read-modify-write, and refuses when a
+--- file moved underneath it (§Locking). `opts.baseline` is what the caller last
+--- saw — an issue buffer opened ten minutes ago is exactly the window where
+--- someone else's edit gets silently overwritten, and the lock cannot help
+--- there because a text editor never takes one.
 ---@param uri string
 ---@param overlay table  Any subset of memo / metadata / prompt.
+---@param opts { baseline: table<string,string>? }?
 ---@return string[] written  Field names that were written.
 ---@return string? err
-function M.write(uri, overlay)
+function M.write(uri, overlay, opts)
+  local result, lerr = lock.with("subject", uri, "overlay.write", function()
+    return M._write_locked(uri, overlay, opts)
+  end)
+  if not result then
+    return {}, lerr
+  end
+  return result.written, result.err or lerr
+end
+
+---@param uri string
+---@param overlay table
+---@param opts { baseline: table<string,string>? }?
+---@return { written: string[], err: string? }
+function M._write_locked(uri, overlay, opts)
   local current = M.read(uri)
   local written = {}
+  local baseline = (opts or {}).baseline
+
+  if baseline then
+    for field in pairs(overlay) do
+      if baseline[field] ~= nil and baseline[field] ~= current[field] then
+        -- Refuse rather than merge: there is no safe merge of two hand-edits,
+        -- and guessing at one loses somebody's text either way.
+        return {
+          written = written,
+          err = ("%s changed on disk since you opened it — reload and reapply your change (nothing was written)"):format(
+            M.path(uri, field) or field
+          ),
+        }
+      end
+    end
+  end
 
   for field, value in pairs(overlay) do
     if FILES[field] and type(value) == "string" then
@@ -92,7 +130,7 @@ function M.write(uri, overlay)
     end
   end
 
-  return written
+  return { written = written }
 end
 
 ---Parsed metadata, for search, filtering, and export.

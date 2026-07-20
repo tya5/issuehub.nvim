@@ -2,6 +2,7 @@
 local fs = require("issuehub.util.fs")
 local repository = require("issuehub.core.repository")
 local issue_mod = require("issuehub.core.issue")
+local lock = require("issuehub.core.lock")
 
 local M = {}
 
@@ -75,7 +76,14 @@ end
 ---@return boolean ok
 ---@return string? err
 function M.put(issue, opts)
-  local ok, err = write_entry(issue, opts and opts.partial == true or false)
+  -- The provider's whole cache directory, not this issue: the case-collision
+  -- guard inside write_entry compares two DIFFERENT ids that collide on a
+  -- case-insensitive filesystem, so a per-issue lock would have the two racing
+  -- writers locking two different names and serialising nothing.
+  local provider = issue_mod.parse(issue.uri)
+  local ok, err = lock.with("cache", provider or "unknown", "cache.put", function()
+    return write_entry(issue, opts and opts.partial == true or false)
+  end)
   if not ok then
     return false, err
   end
@@ -91,10 +99,24 @@ end
 ---@return integer written
 function M.put_all(issues)
   local stored = {}
+  -- One lock for the batch rather than one per issue: a sync writes thousands
+  -- of entries, and acquiring/releasing per issue is the same cost mistake as
+  -- indexing per issue.
+  local by_provider = {}
   for _, issue in ipairs(issues) do
-    if write_entry(issue, true) then
-      stored[#stored + 1] = issue
-    end
+    local provider = issue_mod.parse(issue.uri) or "unknown"
+    by_provider[provider] = by_provider[provider] or {}
+    table.insert(by_provider[provider], issue)
+  end
+
+  for provider, batch in pairs(by_provider) do
+    lock.with("cache", provider, "cache.put_all", function()
+      for _, issue in ipairs(batch) do
+        if write_entry(issue, true) then
+          stored[#stored + 1] = issue
+        end
+      end
+    end)
   end
   require("issuehub.core.index").get():put_many(stored)
   return #stored

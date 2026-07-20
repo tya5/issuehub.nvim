@@ -229,6 +229,22 @@ function M.apply(rows, opts)
   local result = { imported = {}, unchanged = 0, overwritten = {}, errors = {}, metadata_comments = {} }
 
   for _, row in ipairs(rows) do
+    -- One lock per row rather than one for the file: a large import would
+    -- otherwise hold every subject at once, and a row is the unit that has to
+    -- be all-or-nothing anyway.
+    require("issuehub.core.lock").with("subject", row.uri, "import.apply", function()
+      M._apply_row(row, opts, result)
+    end)
+  end
+
+  return result
+end
+
+---@param row issuehub.ImportRow
+---@param opts { dry_run: boolean? }
+---@param result issuehub.ImportResult
+function M._apply_row(row, opts, result)
+  do
     local current = overlay.read(row.uri)
     local changes = {}
 
@@ -275,8 +291,6 @@ function M.apply(rows, opts)
       result.imported[#result.imported + 1] = row.uri
     end
   end
-
-  return result
 end
 
 ---@param path string

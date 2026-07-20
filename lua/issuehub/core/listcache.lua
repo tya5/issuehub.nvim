@@ -9,6 +9,7 @@
 --- backlog is still useful and resumable rather than all-or-nothing.
 
 local fs = require("issuehub.util.fs")
+local lock = require("issuehub.core.lock")
 local repository = require("issuehub.core.repository")
 
 local M = {}
@@ -77,6 +78,20 @@ end
 ---@param opts { cursor: any, complete: boolean?, reset: boolean? }?
 ---@return issuehub.CachedList
 function M.merge(provider, query, uris, opts)
+  -- A paginated fetch flushes per page; two of them against the same query
+  -- would otherwise interleave read-modify-writes and lose whole pages.
+  local list = lock.with("lists", M.key(provider, query), "listcache.merge", function()
+    return M._merge_locked(provider, query, uris, opts)
+  end)
+  return list
+end
+
+---@param provider string
+---@param query any
+---@param uris string[]
+---@param opts table?
+---@return issuehub.CachedList
+function M._merge_locked(provider, query, uris, opts)
   opts = opts or {}
   local now = os.date("!%Y-%m-%dT%H:%M:%SZ")
 
@@ -112,10 +127,12 @@ end
 ---@param provider string
 ---@param query any
 function M.forget(provider, query)
-  local path = path_of(M.key(provider, query))
-  if path and fs.exists(path) then
-    vim.uv.fs_unlink(path)
-  end
+  lock.with("lists", M.key(provider, query), "listcache.forget", function()
+    local path = path_of(M.key(provider, query))
+    if path and fs.exists(path) then
+      vim.uv.fs_unlink(path)
+    end
+  end)
 end
 
 ---Seconds since the list was last touched, or nil when never fetched.

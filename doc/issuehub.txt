@@ -665,6 +665,34 @@ before use, so an attachment named `../../../.ssh/authorized_keys` cannot
 escape. Two attachments sharing a filename get separate directories rather
 than overwriting each other.
 
+                                                        *issuehub-locking*
+CONCURRENT WRITERS ~
+
+The workspace is written by this plugin, by the `issuehub` CLI, and by you
+with a text editor — at the same time, by design. Two mechanisms keep that
+from silently losing an update.
+
+A lock file under `.state/lock/` is taken for the duration of every
+read-modify-write (a memo, `state.yaml`, a cache entry, a cached list, a
+collection). If another process holds it, the write waits, and after ten
+seconds it fails with a message naming who holds it and since when.
+
+**Nothing ever removes a lock file automatically.** If a process was killed,
+its lock stays until you delete it, and the error tells you the path. That is
+deliberate: deciding a lock is stale requires guessing whether its owner is
+alive, which cannot be answered on shared storage, after a pid is reused, or
+for a slow import that is simply still running — and guessing wrong loses
+data quietly, which is worse than an error you can see.
+
+The second mechanism covers what a lock cannot. Your text editor will never
+take one, so every write also re-reads the file first and refuses if it moved
+since it was read: >
+    issuehub: save failed — …/memo.md changed on disk since you opened it
+    — reload and reapply your change (nothing was written)
+<
+Nothing is merged and nothing is overwritten; reload the buffer (`:e!`) and
+reapply. Plain reads never take a lock.
+
                                                      *issuehub-disclosure*
 What ends up in Git, and what leaves the machine ~
 

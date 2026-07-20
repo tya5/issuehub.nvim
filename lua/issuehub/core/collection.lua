@@ -8,6 +8,7 @@
 local fs = require("issuehub.util.fs")
 local repository = require("issuehub.core.repository")
 local yaml = require("issuehub.util.yaml")
+local lock = require("issuehub.core.lock")
 
 local M = {}
 
@@ -103,6 +104,21 @@ function M.save(collection)
     return false, "workspace not configured"
   end
 
+  local ok, lerr = lock.with("subject", "collection:" .. slug, "collection.save", function()
+    return M._save_locked(collection, path, slug)
+  end)
+  if ok == nil then
+    return false, lerr
+  end
+  return ok, lerr
+end
+
+---@param collection issuehub.Collection
+---@param path string
+---@param slug string
+---@return boolean ok
+---@return string? err
+function M._save_locked(collection, path, slug)
   local payload = { name = collection.name, issues = collection.issues or {} }
   if collection.description then
     payload.description = collection.description
@@ -124,6 +140,16 @@ end
 ---@param uri string
 ---@return boolean added  false when it was already a member.
 function M.add(name, uri)
+  local added = lock.with("subject", "collection:" .. M.slug(name), "collection.add", function()
+    return M._add_locked(name, uri)
+  end)
+  return added == true
+end
+
+---@param name string
+---@param uri string
+---@return boolean added
+function M._add_locked(name, uri)
   local collection = M.get(name) or { name = name, slug = M.slug(name), issues = {} }
   if vim.tbl_contains(collection.issues, uri) then
     return false
@@ -139,6 +165,16 @@ end
 ---@param uri string
 ---@return boolean removed
 function M.remove(name, uri)
+  local removed = lock.with("subject", "collection:" .. M.slug(name), "collection.remove", function()
+    return M._remove_locked(name, uri)
+  end)
+  return removed == true
+end
+
+---@param name string
+---@param uri string
+---@return boolean removed
+function M._remove_locked(name, uri)
   local collection = M.get(name)
   if not collection then
     return false
@@ -157,6 +193,15 @@ end
 ---@param name string
 ---@return boolean deleted
 function M.delete(name)
+  local existed = lock.with("subject", "collection:" .. M.slug(name), "collection.delete", function()
+    return M._delete_locked(name)
+  end)
+  return existed == true
+end
+
+---@param name string
+---@return boolean deleted
+function M._delete_locked(name)
   local slug = M.slug(name)
   local legacy = legacy_path_of(slug)
   local dir = repository.subject_dir("collection:" .. slug)

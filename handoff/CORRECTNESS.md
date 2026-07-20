@@ -208,6 +208,27 @@ suite.** They are the difference between a port and a regression.
   `import_merge_metadata_key_reorder_counts_as_overwrite`,
   `import_merge_metadata_comment_loss_reported`.
 
+## Locking
+
+- Both implementations take the locks, or neither is protected: a lock file is
+  just a name, and an unlocking writer reads-modifies-writes straight through
+  it. A protocol adopted by one side is **exactly as protective as no protocol**
+  for every bug it exists to prevent.
+- **Never break a lock automatically**, whatever its age. Every liveness signal
+  is unreliable where it matters: a pid is meaningless on storage written from
+  another host, pids are reused after a crash, and a lock that looks stale is
+  often a slow import still running — breaking that one silently reintroduces
+  the lost update. Report the owner, name the file, let a human decide.
+- The **provider-cache-directory** lock (not a per-subject one) covers the
+  case-collision check and the write it guards, because the check is inherently
+  between two *different* ids colliding on one path.
+- The lock and the content re-check are independent halves. The lock binds
+  writers that honour it; the re-check catches the one that structurally cannot
+  — a text editor. Refuse on a changed file: there is no safe merge of two
+  hand-edits.
+- Release must survive a failure in the protected operation, or one failed write
+  leaves a lock file that blocks every later one until a human deletes it.
+
 ## Attachments
 
 - Metadata travels with the Issue; **bytes are fetched only on an explicit

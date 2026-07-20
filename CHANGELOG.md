@@ -10,6 +10,29 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ### Added
 
+- **Cross-process locking.** The workspace is written by this plugin, by the
+  `issuehub` CLI, and by a human in a text editor, concurrently and by design —
+  without a protocol, each side's read-modify-write silently drops the others'.
+  Every such window now takes an `O_CREAT|O_EXCL` lock file under `.state/lock/`
+  (`vim.uv.fs_open(path, "wx")`; Lua's `io.open(path, "w")` truncates and is not
+  a safe primitive). The wire format matches the CLI's byte for byte — it is a
+  shared on-disk contract, not an implementation detail, and a lock only one
+  side takes protects nothing.
+  - The provider *cache directory* is locked for a cache write, not the issue:
+    the case-collision guard compares two different ids that collide on one
+    path, so a per-issue lock would serialise nothing.
+  - **A lock is never broken automatically**, however old. Every liveness check
+    is unreliable exactly where breaking would do most damage. A timeout names
+    the holder, the operation, the age, and the file to delete.
+  - Acquisition is re-entrant: `import` holds a subject lock and calls
+    `overlay.write`, which takes the same one.
+  - Plus the half a lock cannot cover: a text editor never takes one, so writes
+    also refuse when the file moved since it was read. An issue buffer saves
+    against what it rendered, so an hour-old buffer cannot overwrite an edit
+    made in the meantime. Nothing is merged, nothing is overwritten.
+
+### Added
+
 - **Attachments.** `:IssueHub attachments` lists what an issue has and downloads
   the one you pick (`--all` for every one); the issue header gained a `Files:`
   line so you can see there is something to ask for. Jira and Redmine report

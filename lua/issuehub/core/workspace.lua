@@ -9,6 +9,7 @@ local overlay = require("issuehub.core.overlay")
 local repository = require("issuehub.core.repository")
 local fs = require("issuehub.util.fs")
 local yaml = require("issuehub.util.yaml")
+local lock = require("issuehub.core.lock")
 
 local M = {}
 
@@ -55,6 +56,21 @@ function M.set_state(uri, state)
     return false, ("cannot resolve a path for %s"):format(uri)
   end
 
+  -- Read-modify-write: without the lock, two processes each merging their own
+  -- field into the same file means the later write drops the earlier one, and
+  -- nothing anywhere reports it.
+  local ok, err = lock.with("subject", uri, "workspace.set_state", function()
+    return M._set_state_locked(path, uri, state)
+  end)
+  return ok == true, err
+end
+
+---@param path string
+---@param uri string
+---@param state issuehub.State
+---@return boolean ok
+---@return string? err
+function M._set_state_locked(path, uri, state)
   local merged = vim.tbl_extend("force", M.state(uri), state)
 
   -- Don't create a file just to record `bookmarked: false` with nothing else in
@@ -100,9 +116,17 @@ end
 ---@param uri string
 ---@return boolean bookmarked  The new value.
 function M.toggle_bookmark(uri)
-  local state = M.state(uri)
-  local value = not state.bookmarked
-  M.set_state(uri, { bookmarked = value })
+  -- The read and the write are one operation: read-then-set without holding
+  -- the lock across both is a toggle that can lose a concurrent one. The lock
+  -- is re-entrant, so set_state taking it again inside is free.
+  local value
+  lock.with("subject", uri, "workspace.toggle_bookmark", function()
+    value = not M.state(uri).bookmarked
+    M.set_state(uri, { bookmarked = value })
+  end)
+  if value == nil then
+    return M.state(uri).bookmarked
+  end
   require("issuehub.core.index").get():set_bookmark(uri, value)
   return value
 end
