@@ -132,13 +132,23 @@ local function to_row(record)
     end
   end
 
+  -- Written out rather than as `present and to_boolean(x) or nil`, because that
+  -- idiom silently collapses false into nil in Lua: an explicit
+  -- `bookmarked,false` would read as "column absent, leave it alone" and a
+  -- bookmark could never be *cleared* from a spreadsheet. `to_boolean` returning
+  -- nil (unrecognised text) is the only thing that means "leave it alone".
+  local bookmarked = nil
+  if record.bookmarked ~= nil then
+    bookmarked = to_boolean(record.bookmarked)
+  end
+
   return {
     uri = uri,
     -- Absent column vs empty cell are different: absent means "not in this
     -- file, leave it alone"; empty means "clear it".
     memo = record.memo,
     metadata = metadata,
-    bookmarked = record.bookmarked ~= nil and to_boolean(record.bookmarked) or nil,
+    bookmarked = bookmarked,
   }
 end
 

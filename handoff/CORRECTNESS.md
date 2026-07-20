@@ -167,6 +167,14 @@ suite.** They are the difference between a port and a regression.
   regenerates it from the merged key set, so **comments in that file are lost**.
   Report the affected URIs (`metadata_comments`) rather than losing them
   quietly.
+- `bookmarked` is tri-state on the way in: **absent column** = leave it alone,
+  `false`/`no`/`0`/empty = **clear the bookmark**, `true`/`yes`/`1` = set it.
+  Unrecognised text is the only other "leave it alone". Clearing must reach both
+  `state.yaml` and the index. (The Lua side had this wrong: `present and
+  to_boolean(x) or nil` collapses `false` into `nil`, so a bookmark could be set
+  from a spreadsheet but never removed — and no test observing only true values
+  would catch it. Corpus:
+  `import_merge_bookmarked_false_clears_bookmark`.)
 - Export's flattening is reversed on the way in: a cell containing `; ` becomes
   a list again.
 - **The file wins on conflict, with no per-row prompt**, justified only by the

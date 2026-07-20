@@ -117,6 +117,30 @@ describe("import: conflicts", function()
     assert.equals("memo", result.overwritten[1].field)
   end)
 
+  it("clears a bookmark when the file says false", function()
+    -- corpus: import_merge_bookmarked_false_clears_bookmark. `false` must not
+    -- collapse into "column absent" — otherwise a bookmark can only ever be
+    -- set from a spreadsheet, never removed, and no test that only observes
+    -- true values would notice.
+    workspace.toggle_bookmark(URI)
+    assert.is_true(workspace.state(URI).bookmarked)
+
+    local result = assert(importer.run(write(".csv", "uri,bookmarked\njira://PROJ-1,false\n")))
+    assert.same({ URI }, result.imported)
+    assert.is_false(workspace.state(URI).bookmarked)
+    for _, item in ipairs(require("issuehub.core.index").get():list()) do
+      if item.uri == URI then
+        assert.is_false(item.bookmarked, "the index must follow, not just state.yaml")
+      end
+    end
+  end)
+
+  it("leaves a bookmark alone when the cell is not a boolean", function()
+    workspace.toggle_bookmark(URI)
+    importer.run(write(".csv", "uri,bookmarked\njira://PROJ-1,maybe\n"))
+    assert.is_true(workspace.state(URI).bookmarked)
+  end)
+
   it("counts an identical row as unchanged rather than overwritten", function()
     overlay.write(URI, { memo = "same" })
     local result = assert(importer.run(write(".csv", "uri,memo\njira://PROJ-1,same\n")))
