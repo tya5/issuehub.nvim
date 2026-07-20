@@ -59,7 +59,8 @@ end
 ---@return issuehub.BackendCaps
 function A2A:capabilities()
   -- Before discovery completes, assume the baseline every A2A agent supports.
-  return self.caps or { kinds = { "analyze", "complete" }, streaming = false, detail = "not yet discovered" }
+  return self.caps
+    or { kinds = { "analyze", "complete", "translate" }, streaming = false, detail = "not yet discovered" }
 end
 
 ---Fetch the agent card. Optional: `send` works without it, and this only
@@ -87,7 +88,7 @@ function A2A:discover(cb)
     end
 
     self.caps = {
-      kinds = { "analyze", "complete" },
+      kinds = { "analyze", "complete", "translate" },
       streaming = streaming,
       detail = card and (card.name or card.description) or "agent card returned no name",
     }

@@ -56,6 +56,14 @@ local defaults = {
     default_format = "markdown",
   },
 
+  -- Translations are produced on request through the configured backend and
+  -- stored per language beside the issue's notes.
+  translate = {
+    default_language = nil, -- e.g. "ja"; prompts when unset and none is given
+    languages = {}, -- offered in the prompt; free text is still accepted
+    include_comments = false, -- comments can dominate the request on busy issues
+  },
+
   -- AI is opt-in. With "none", nothing is ever sent anywhere.
   backend = "none",
   backends = {

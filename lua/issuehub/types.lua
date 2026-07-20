@@ -92,6 +92,7 @@
 ---@field ui issuehub.UIConfig
 ---@field sync issuehub.SyncConfig
 ---@field export issuehub.ExportConfig
+---@field translate issuehub.TranslateConfig
 ---@field backend string
 ---@field backends table<string, table>
 ---@field http issuehub.HttpConfig
@@ -126,5 +127,10 @@
 ---@class issuehub.ExportConfig
 ---@field dir string?             Output directory; defaults to the cwd.
 ---@field default_format string
+
+---@class issuehub.TranslateConfig
+---@field default_language string?
+---@field languages string[]
+---@field include_comments boolean
 
 return {}

@@ -139,6 +139,15 @@ local function render_opts(uri)
     seen_at = state.last_seen_updated_at,
     -- Whether the newest analysis still describes the issue as it is now.
     analysis = require("issuehub.core.analysis").latest(uri),
+    translations = (function()
+      local translation = require("issuehub.core.translation")
+      local out = {}
+      for _, lang in ipairs(translation.languages(uri)) do
+        local entry = translation.get(uri, lang)
+        out[#out + 1] = ("%s (%s)"):format(lang, entry and entry.status or "?")
+      end
+      return out
+    end)(),
   }
 end
 

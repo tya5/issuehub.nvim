@@ -78,6 +78,14 @@ local subcommands = {
     require("issuehub").conversation(args[1])
   end,
 
+  translate = function(args)
+    require("issuehub").translate(args[1], args[2])
+  end,
+
+  translations = function(args)
+    require("issuehub").translations(args[1])
+  end,
+
   analyses = function(args)
     require("issuehub").analyses(args[1])
   end,

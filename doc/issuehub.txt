@@ -240,6 +240,12 @@ pollute the global command namespace.
                           means the view you were last looking at.
 :IssueHub prompt [{uri}]  Open the conversation window: analysis history and
                           the next prompt. See |issuehub-conversation|.
+:IssueHub translate [{lang}] [{uri}]
+                          Translate the issue through the configured backend
+                          and store it under `translations/<lang>.md`.
+                          See |issuehub-translations|.
+:IssueHub translations [{uri}]
+                          Open a stored translation.
 :IssueHub analyze [{uri}] Analyse through the configured backend.
 :IssueHub analyses [{uri}]
                           Browse an issue's analysis history.
@@ -566,6 +572,30 @@ would propagate its staleness.
 Note: the bundled A2A backend is written against the JSON-RPC `message/send`
 shape with agent-card discovery but has NOT been exercised against a live
 agent. Treat it as a starting point.
+
+                                                   *issuehub-translations*
+TRANSLATIONS ~
+
+`:IssueHub translate ja` sends the issue through the configured backend and
+stores the result as `translations/ja.md` beside your notes — tracked in Git,
+one file per language, editable by hand when the machine gets it wrong. >lua
+    translate = {
+      default_language = "ja",   -- skips the prompt
+      languages = { "ja", "en" },-- offered when no default is set
+      include_comments = false,  -- comments can dominate a busy issue
+    }
+<
+It is user-triggered only: nothing is sent anywhere until you ask, and each
+request costs a model call.
+
+Staleness works exactly like an analysis (|issuehub-staleness|): the file
+records the issue revision it was made from, and `current`/`OUTDATED` is
+derived by comparing that against the cache — never stored, so it stays right
+across a `git revert`. The issue header shows it, and translated text is
+searchable with `:IssueHub find`.
+
+Requires a backend; with the default `none`, `translate` reports that and does
+nothing. |issuehub-backends|
 
 ==============================================================================
 13. CORPORATE NETWORKS                                   *issuehub-network*

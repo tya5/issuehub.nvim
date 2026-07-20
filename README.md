@@ -854,6 +854,31 @@ the same window. A prompt is one turn of a conversation and you write the next
 one by reading the previous answers — which is awkward when the prompt sits
 between memo and metadata and the answers live somewhere else entirely.
 
+### Translations
+
+```vim
+:IssueHub translate ja      " translate through the backend, store it
+:IssueHub translations      " open a stored one
+```
+
+Stores the result as `translations/ja.md` beside your notes — one file per
+language, tracked in Git, and editable by hand when the machine gets it wrong.
+
+```lua
+translate = {
+  default_language = "ja",      -- skips the prompt
+  languages = { "ja", "en" },   -- offered when no default is set
+  include_comments = false,     -- comments can dominate a busy issue
+},
+```
+
+Staleness works like an analysis: the file records the issue revision it was made
+from, and the issue header shows `ja (current)` or `ja (outdated)` — derived, so a
+`git revert` puts it right. Translated text is searchable with `:IssueHub find`.
+
+User-triggered only, and it needs a backend: with the default `none`, nothing is
+sent anywhere.
+
 ### Bookmarks
 
 ```vim
@@ -955,6 +980,7 @@ Only what belongs in Git lives at the root; everything derived is under
 │   ├── memo.md                # your notes
 │   ├── metadata.yaml          # free-form key/value
 │   ├── prompt.md              # the next prompt (conversation window)
+│   ├── translations/ja.md     # one per language, tracked, hand-editable
 │   ├── state.yaml             # bookmark, last-seen revision
 │   └── analyses/
 │       └── 2026-07-19T11-17-00Z/  # prompt.md, response.md, metadata.yaml

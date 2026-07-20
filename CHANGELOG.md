@@ -10,6 +10,22 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ### Added
 
+- **Translations.** `:IssueHub translate <lang>` sends an issue through the
+  configured backend and stores the result as `translations/<lang>.md` beside
+  the notes — one file per language, tracked in Git, hand-editable when the
+  machine gets it wrong. Staleness is derived from the issue revision it was made
+  from, exactly like an analysis, so a `git revert` puts it right; the issue
+  header shows `ja (current)` / `ja (outdated)`. Translated prose joins the
+  full-text index and the ripgrep path, which reports `translation:ja` as the
+  matched field. User-triggered only, and inert without a backend.
+  - Language tags are validated before becoming filenames — the tag is
+    user-supplied and lands in a path, so `../` and friends are rejected rather
+    than sanitised.
+  - The backend contract's `kind` dispatch, built in 0.1.0 for exactly this,
+    absorbed the new request type without changing the interface.
+
+### Added
+
 - **Project scoping.** A server holds many projects, and scoping only to the
   server left lists as mixed as they were before. `project` is now part of the
   canonical Issue — the Jira project key, the Redmine identifier, the GitHub or

@@ -670,6 +670,88 @@ function M.changed()
   require("issuehub.ui.picker").pick(view, { title = ("changed (%d)"):format(#items) })
 end
 
+---Translate an issue through the configured Backend and store the result.
+---
+---User-triggered by design: nothing is sent anywhere unless asked, and a
+---translation costs a model call.
+---@param lang string?
+---@param uri string?
+function M.translate(lang, uri)
+  uri = uri or require("issuehub.ui.buffer").current_uri()
+  if not uri then
+    return vim.notify("issuehub: open an issue first, or pass a URI", vim.log.levels.WARN)
+  end
+
+  local settings = require("issuehub.config").get().translate
+  if not lang or lang == "" then
+    lang = settings.default_language
+  end
+
+  if not lang or lang == "" then
+    local choices = settings.languages
+    if choices and #choices > 0 then
+      return vim.ui.select(choices, { prompt = "Translate into" }, function(chosen)
+        if chosen then
+          M.translate(chosen, uri)
+        end
+      end)
+    end
+    return vim.ui.input({ prompt = "Translate into (e.g. ja): " }, function(value)
+      if value and vim.trim(value) ~= "" then
+        M.translate(vim.trim(value), uri)
+      end
+    end)
+  end
+
+  local translation = require("issuehub.core.translation")
+  local request, err = translation.request(uri, lang, { include_comments = settings.include_comments })
+  if not request then
+    return vim.notify("issuehub: " .. tostring(err), vim.log.levels.ERROR)
+  end
+
+  local existing = translation.get(uri, lang)
+  if existing and existing.status == "current" then
+    vim.notify(("issuehub: %s translation is already current — regenerating"):format(lang), vim.log.levels.INFO)
+  end
+
+  vim.notify(("issuehub: translating %s into %s…"):format(uri, lang))
+
+  require("issuehub.backend").send(request, {}, function(serr, res)
+    if serr then
+      return vim.notify("issuehub: " .. serr, vim.log.levels.ERROR)
+    end
+
+    local title, body = translation.split_reply(res.text)
+    if body == "" then
+      return vim.notify("issuehub: the backend returned an empty translation", vim.log.levels.ERROR)
+    end
+
+    local active = select(1, require("issuehub.backend").get())
+    local ok, werr = translation.save(uri, lang, {
+      title = title,
+      body = body,
+      backend = active and active.name or nil,
+      model = res.model,
+    })
+    if not ok then
+      return vim.notify("issuehub: could not save the translation — " .. tostring(werr), vim.log.levels.ERROR)
+    end
+
+    vim.notify(("issuehub: %s translation saved"):format(lang))
+    require("issuehub.ui.translation").open(uri, lang)
+  end)
+end
+
+---Browse an issue's stored translations.
+---@param uri string?
+function M.translations(uri)
+  uri = uri or require("issuehub.ui.buffer").current_uri()
+  if not uri then
+    return vim.notify("issuehub: open an issue first", vim.log.levels.WARN)
+  end
+  require("issuehub.ui.translation").select(uri)
+end
+
 ---Open the conversation window: analysis history plus the next prompt.
 ---@param uri string?
 function M.conversation(uri)

@@ -135,6 +135,9 @@ function M.issue(issue, entry, overlay, opts)
     if opts.analysis then
       push(("- Analysis: %s (%s)"):format(opts.analysis.stamp, opts.analysis.status))
     end
+    if opts.translations and #opts.translations > 0 then
+      push(("- Translated: %s"):format(table.concat(opts.translations, ", ")))
+    end
     if opts.changed_since_seen then
       -- Surfaced in the header rather than as a notification: it is a property
       -- of this issue, and it should still be visible an hour later.

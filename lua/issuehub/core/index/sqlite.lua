@@ -156,7 +156,12 @@ local function documents(uri)
   return {
     memo = overlay.memo,
     metadata = overlay.metadata,
-    analyses = require("issuehub.core.analysis").searchable_text(uri),
+    -- Analyses and translations are both accumulated prose about the issue;
+    -- the column is named for the first but carries every generated text.
+    analyses = table.concat({
+      require("issuehub.core.analysis").searchable_text(uri),
+      require("issuehub.core.translation").searchable_text(uri),
+    }, "\n\n"),
   }
 end
 
