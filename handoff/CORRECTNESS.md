@@ -234,6 +234,11 @@ suite.** They are the difference between a port and a regression.
 - Metadata travels with the Issue; **bytes are fetched only on an explicit
   request**, and are stored under `.state/` (never the workspace). Both rules
   are in ONDISK §Attachments with the reasoning.
+- **A partial cache entry must not empty the attachment list.** Only some
+  providers return attachments on list/search (Redmine needs `include=` and so
+  returns none), so an empty incoming array means "not asked", never "there are
+  none" — exactly the rule `description` already has. A complete fetch reporting
+  none *is* authoritative.
 - An entry missing any of id / filename / URL is dropped at normalisation:
   listing something that cannot then be downloaded is worse than not listing
   it.

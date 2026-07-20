@@ -116,6 +116,19 @@ describe("attachment storage", function()
     assert.equals("ok.txt", list[1].filename)
   end)
 
+  it("keeps attachments when a partial refresh does not mention them", function()
+    -- Same family as the description bug: list/search does not return
+    -- attachments on every provider, so an empty incoming list means "not
+    -- asked", never "there are none".
+    cache.put(make({ { id = "1", filename = "trace.log", url = "https://x/1" } }))
+    cache.put(make(nil), { partial = true })
+    assert.equals(1, #attachment.list(URI))
+
+    -- ...but a complete fetch that reports none is authoritative.
+    cache.put(make({}))
+    assert.equals(0, #attachment.list(URI))
+  end)
+
   it("has none for an issue that is not cached", function()
     assert.same({}, attachment.list("jira://NOPE"))
   end)

@@ -56,6 +56,13 @@ local function write_entry(issue, partial)
       issue = vim.tbl_extend("force", existing.issue, issue)
       issue.description = existing.issue.description
       issue.comments = existing.issue.comments
+      -- Same rule, one field later: a partial that says nothing about
+      -- attachments must not be read as saying there are none. Redmine only
+      -- returns them for get(), so a list refresh would otherwise empty the
+      -- list every time. An empty incoming list means "not asked", not "none".
+      if #issue.attachments == 0 then
+        issue.attachments = existing.issue.attachments
+      end
     end
   end
 
