@@ -115,7 +115,9 @@ Containment is mechanical, not disciplinary:
    - Keep it in one place, vendored into the other repo (a small file set, so
      copying beats a submodule) and refreshed when either side adds a case.
    - Every bug found live becomes a corpus entry **before** it is fixed, in
-     whichever implementation found it. That is what makes the second
+     whichever implementation found it. The memo/heading truncation
+     (CORRECTNESS §Overlay section boundaries) is the newest such entry: found
+     by a user typing `## Metadata` into a note, and cheap to assert in both. That is what makes the second
      implementation cheap to correct rather than a place bugs hide.
 2. **ONDISK.md is the on-disk contract.** Both write the same workspace, so a
    format change in either is a breaking change for the other. Change it in the
@@ -179,8 +181,18 @@ verification gap:
    suites, starting with the four bugs live verification already found (the
    draft-PR precedence case, the partial-baseline sync case, and the two
    CLI-surface ones that have no Lua equivalent).
-2. **Verify Jira, Redmine, and GitLab against real instances.** GitHub alone
+2. **Catch the CLI up to the three additions the plugin has made since this
+   handoff was written**, in this order — each is pure data work with no UI
+   entanglement, which is why they belong here at all:
+   - **Import** (CONTRACT §`issuehub import`, CORRECTNESS §Import). The
+     export→import round trip is the corpus entry; the asymmetry (issue columns
+     discarded, absent column ≠ empty cell) is where a port goes wrong.
+   - **Translation storage** — read, index, and language-tag *validation*
+     (ONDISK §Translations). Not generation.
+   - **Overlay opacity** (CORRECTNESS §Overlay section boundaries): confirm the
+     Python side never parses markers out of memo text.
+3. **Verify Jira, Redmine, and GitLab against real instances.** GitHub alone
    produced four bugs that every recorded fixture had passed through; there is no
    reason to expect the other three to be cleaner.
-3. **Wire `:IssueHub summarize`** in the plugin — the one place it calls the CLI,
+4. **Wire `:IssueHub summarize`** in the plugin — the one place it calls the CLI,
    degrading with a clear message when the binary is absent.

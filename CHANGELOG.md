@@ -32,7 +32,8 @@ This project is pre-1.0: the public API may break between minor versions until
   from, exactly like an analysis, so a `git revert` puts it right; the issue
   header shows `ja (current)` / `ja (outdated)`. Translated prose joins the
   full-text index and the ripgrep path, which reports `translation:ja` as the
-  matched field. User-triggered only, and inert without a backend.
+  matched field (the FTS path reports `analyses` — translations and analyses
+  share a column). User-triggered only, and inert without a backend.
   - Language tags are validated before becoming filenames — the tag is
     user-supplied and lands in a path, so `../` and friends are rejected rather
     than sanitised.

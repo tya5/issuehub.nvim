@@ -120,6 +120,8 @@ Returns `ViewItem`s annotated with `matched_in`:
 ```json
 { "items": [ { "uri":"…","id":"…","title":"…","matched_in":"memo,metadata" } ] }
 ```
+`matched_in` may also name a translation as `translation:<lang>` on the ripgrep
+path; the FTS path reports those hits as `analyses` (ONDISK §Translations).
 
 ### `issuehub export --source <src> --format <fmt> [-o <path>] [--json]`
 
@@ -130,6 +132,28 @@ issue known only by its notes still appears, with blank issue columns (see
 CORRECTNESS §Merged export). Columns and their order are fixed (ONDISK §Export
 columns), including precomputed `age_days` / `days_to_close`. Returns the path
 written: `{ "path": "…/all.csv", "rows": 1240 }`.
+
+### `issuehub import <file> [--dry-run] [--json]`
+
+Merge an exported CSV or JSON back into the workspace — the spreadsheet-triage
+round trip. **Deliberately not the inverse of export**: only `memo`, `meta.*`,
+and `bookmarked` are merged; issue columns are read and discarded (CORRECTNESS
+§Import). `--dry-run` computes and reports the identical result without writing.
+
+```json
+{
+  "imported": ["jira://PROJ-1"],
+  "unchanged": 42,
+  "overwritten": [ { "uri": "jira://PROJ-1", "field": "memo" } ],
+  "metadata_comments": ["jira://PROJ-2"],
+  "errors": ["not a valid issue URI: nonsense"],
+  "git": true
+}
+```
+`overwritten` must be reported, not summarised away: the file wins on conflict
+without prompting, and that is only defensible because the report tells the user
+where to point `git diff`. `git` is whether the workspace is a Git repository —
+false means the undo does not exist and the caller should say so loudly.
 
 ### `issuehub summarize --source <src> [--by month|project|status|assignee|age] [--json]`
 

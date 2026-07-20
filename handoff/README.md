@@ -57,8 +57,9 @@ plugin implements the second.)
 - Cache, index (SQLite + JSON fallback), list cache.
 - Workspace: overlay (memo/metadata), `state.yaml`, collections.
 - Sync and change detection.
-- Export and summarisation (this is where `pandas` earns its place).
-- Local search (ripgrep / FTS5).
+- Export **and import** (ONDISK §Export columns, CORRECTNESS §Import), and
+  summarisation (this is where `pandas` earns its place).
+- Local search (ripgrep / FTS5), including translated prose.
 
 **Plugin-only (no CLI equivalent, and none wanted):**
 
@@ -68,6 +69,10 @@ plugin implements the second.)
   scoped these OUT of the CLI. They stay Lua-side for now. (The on-disk
   `analyses/` layout is still documented in ONDISK.md because the CLI must not
   trample it.)
+- **Producing translations.** Generation goes through the AI backend, so it
+  follows the same rule. The *format* is shared, though: the CLI reads
+  `translations/<lang>.md`, indexes it for search, and must leave its
+  frontmatter alone (ONDISK §Translations).
 
 ## Non-negotiables
 

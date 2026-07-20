@@ -35,6 +35,15 @@ describe("search.locate", function()
     assert.equals("analysis", field)
   end)
 
+  it("names the language a translation hit came from", function()
+    local root = repository.root()
+    -- Which language matched is the useful part, not "ja.md".
+    assert.same(
+      { "jira://PROJ-1", "translation:pt-BR" },
+      { search.locate(root, root .. "/jira/PROJ-1/translations/pt-BR.md") }
+    )
+  end)
+
   it("keeps percent-encoded ids intact", function()
     local root = repository.root()
     local uri = search.locate(root, root .. "/github/o%2Fr%231/memo.md")

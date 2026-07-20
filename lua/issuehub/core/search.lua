@@ -38,11 +38,18 @@ function M.locate(root, path)
     return ("%s://%s"):format(provider, encoded), "issue"
   end
 
-  -- <provider>/<encoded>/<file>  (overlay and analyses)
+  -- <provider>/<encoded>/<file>  (overlay, analyses, translations)
   local p, e, rest = relative:match("^([^%./][^/]*)/([^/]+)/(.+)$")
   if p then
+    local uri = ("%s://%s"):format(p, e)
+    -- Which language matched is the useful part, so name it rather than
+    -- reporting the bare filename.
+    local lang = rest:match("^translations/(.+)%.md$")
+    if lang then
+      return uri, "translation:" .. lang
+    end
     local basename = vim.fs.basename(rest)
-    return ("%s://%s"):format(p, e), FIELD_OF[basename] or (rest:match("^analyses/") and "analysis" or basename)
+    return uri, FIELD_OF[basename] or (rest:match("^analyses/") and "analysis" or basename)
   end
 
   return nil, nil

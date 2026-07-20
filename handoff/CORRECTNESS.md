@@ -150,6 +150,40 @@ suite.** They are the difference between a port and a regression.
   row, with issue columns blank and `memo`/metadata present. A project filter
   can only apply to something with a payload.
 
+## Import (merge)
+
+- **Asymmetric with export on purpose.** Only `memo`, `meta.*`, `bookmarked`
+  come back. Issue columns (`title`, `status`, `closed`, dates, `assignee`, …)
+  are parsed and thrown away — the tracker owns them, and a two-week-old
+  spreadsheet must never overwrite the cache with fiction. A port that
+  "helpfully" restores them corrupts the cache in a way sync cannot detect,
+  because the file looks freshly written.
+- **Absent column ≠ empty cell.** An absent column means "not in this file,
+  leave it alone"; an empty cell means "clear it". Collapsing the two wipes
+  memos on any partial-column import.
+- Metadata merges **key-wise into the existing parsed metadata**, so keys the
+  import does not mention survive. The consequence: `metadata.yaml` is normally
+  written back verbatim to preserve comments and key order, but an import
+  regenerates it from the merged key set, so **comments in that file are lost**.
+  Report the affected URIs (`metadata_comments`) rather than losing them
+  quietly.
+- Export's flattening is reversed on the way in: a cell containing `; ` becomes
+  a list again.
+- **The file wins on conflict, with no per-row prompt**, justified only by the
+  workspace being Git-managed. Therefore: report every overwrite by URI and
+  field, support `--dry-run`, and report whether the workspace is actually a Git
+  repo.
+- A row whose `uri` is not a valid issue URI is skipped and reported, not
+  silently dropped. A file that yields zero importable rows is an error, not a
+  no-op success.
+- Rows for issues with no local content yet create it — import is not restricted
+  to issues you have already annotated.
+- The CSV reader must handle everything the writer emits: quoted fields with
+  embedded commas, **embedded newlines** (multi-line memos are the common case),
+  and doubled quotes. A trailing newline must not produce a final empty record.
+- **Round-trip invariant, worth a corpus entry:** exporting and immediately
+  importing changes nothing — every row `unchanged`, zero `imported`.
+
 ## Repository / paths
 
 - Case-collision guard (above, ONDISK §URI). Percent-encode ids verbatim into
@@ -164,8 +198,22 @@ suite.** They are the difference between a port and a regression.
 - v2 directory layout with pre-v2 file fallback and migrate-on-write (ONDISK
   §Collections). `list()` must not show a migrated collection twice.
 
-## Timestamps for analysis staleness (nvim-owned, but don't break it)
+## Derived staleness (nvim-owned, but don't break it)
 
 - `analyses/<stamp>/metadata.yaml.issue_updated_at` vs cached `updated_at`
   decides current/outdated. The CLI must not rewrite these files. It *does* index
   the prose into FTS on `reindex`.
+- `translations/<lang>.md` frontmatter works identically (ONDISK §Translations),
+  with the same rule: derive, never store. Reading and re-writing a translation
+  must leave `issue_updated_at` alone, or a hand-edit would silently mark a stale
+  translation current.
+
+## Overlay section boundaries are files, not headings
+
+The plugin renders memo/metadata/prompt as `##` sections of one buffer, and the
+first implementation split the buffer back apart by scanning for those headings.
+That is wrong: a user writing `## Metadata` *inside* a memo — completely
+legitimate Markdown — truncated their own note. The plugin now anchors each
+region with extmarks; the transferable rule for any implementation is that
+**overlay content is opaque text delimited by file boundaries**, never by
+markers occurring within it. Nothing in a memo may be interpreted.

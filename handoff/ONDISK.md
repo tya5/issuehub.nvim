@@ -34,6 +34,8 @@ truth is `lua/issuehub/core/repository.lua` (paths), `core/cache.lua`,
         ├── metadata.yaml
         ├── prompt.md                 # (written by nvim's conversation window)
         ├── state.yaml
+        ├── translations/
+        │   └── <lang>.md             # one per BCP-47 tag: ja.md, pt-BR.md
         └── analyses/
             └── <YYYY-MM-DDTHH-MM-SSZ>/
                 ├── prompt.md
@@ -195,6 +197,45 @@ Windows; sorts lexicographically). Each holds `prompt.md`, `response.md`, and
 `prompt_source`). **Staleness is derived**, never stored: current iff
 `metadata.issue_updated_at == cached issue.updated_at`. The CLI indexes analysis
 prose into FTS but otherwise leaves this tree to the plugin.
+
+## Translations (nvim-generated, CLI must not disturb — but does index)
+
+`translations/<lang>.md`, one file per language, tracked in Git and meant to be
+hand-corrected when the model gets it wrong. Frontmatter, then the body:
+
+```markdown
+---
+created_at: 2026-07-19T10:15:00Z
+backend: a2a
+model: some-model
+title: キャッシュ暖機のタイムアウト
+issue_updated_at: 2026-07-19T10:00:00Z
+---
+
+本文の一行目
+
+- 箇条書き
+```
+
+- `<lang>` is a **BCP-47-shaped tag validated before it becomes a filename**:
+  `^[A-Za-z][A-Za-z]+[A-Za-z0-9-]*$`, at most 32 chars. This is a path-traversal
+  guard, not tidiness — the tag is user-supplied and lands in a path, so `../`,
+  `a/b`, `.`, `ja.md`, and single letters are rejected rather than sanitised. A
+  port that sanitises instead of rejecting has a different, worse bug.
+- **Staleness is derived, never stored**, exactly like an analysis: current iff
+  `issue_updated_at == cached issue.updated_at`. A `git revert` of the issue
+  therefore makes an old translation current again, which a stored flag could
+  not do.
+- The body is the file below the frontmatter, verbatim — a hand-edit must
+  survive a read/write round-trip untouched, and must not disturb the
+  frontmatter (so an edited translation does not silently become "current").
+- **The CLI generates none of these** (generation goes through the AI backend,
+  which is plugin-only) but it *does* index `title` + body into FTS on
+  `reindex`. The ripgrep path reports the matched field as `translation:<lang>`;
+  the FTS path reports `analyses`, because translations and analyses share one
+  FTS column (both are generated prose about the issue) — match that, or the two
+  implementations disagree on `matched_in` for the same hit.
+  Listing languages is `sorted(glob("translations/*.md"))` by stem.
 
 ## Collections
 
