@@ -1176,7 +1176,57 @@ discovered late.
    human-readable in oil.nvim, Git diffs, and grep. Locked before 0.2 because it
    becomes a breaking on-disk change afterwards.
 
-## 24. Remaining open questions
+## 24. Relationship to `tya5/issuehub` (the Python CLI)
+
+A separate implementation of this core exists as a standalone Python CLI, so the
+same logic is usable outside Neovim. The policy between them, decided after
+measuring:
+
+> **issuehub.nvim is self-contained.** It never requires the CLI to function.
+> **`tya5/issuehub` is an independent implementation** for the shell, analysis,
+> and other clients.
+> **They stay consistent** through the workspace format (`handoff/ONDISK.md`) and
+> a shared conformance corpus.
+> **The plugin calls the CLI only for what should not be built in Lua** — today
+> that means analysis/aggregation, nothing else.
+
+### Why not replace the Lua core with the CLI
+
+That was the original plan (`handoff/PLAN.md` Phase 3) and it is dropped.
+
+- **The goal was already met.** "Reusable outside Neovim" is satisfied by the CLI
+  existing; the plugin consuming it was never a requirement of that.
+- **Measured cost: ~130 ms per invocation** (115–185 ms for the cheapest verb;
+  cumulative imports are only ~32 ms, so the rest is interpreter startup and does
+  not optimise away). That is noise for `sync`/`fetch`/`export`, and unacceptable
+  on the interactive path — picker preview calls `buffer.preview_lines` on every
+  cursor move, which would put 130 ms between keystrokes.
+- **It trades a working, tested implementation for shims** — no user-visible gain,
+  and three new failure modes: CLI absent, contract skew, broken Python
+  environment.
+- **It breaks §1.3.** Zero hard dependencies is the principle this plugin is built
+  on; the plugin must keep working with nothing installed.
+
+### The cost this accepts, and how it is contained
+
+Two implementations means fixing some bugs twice. That is not hypothetical: a
+GitHub status-precedence bug (a draft PR closed without merging reading as open)
+existed in **both**, and the port's finer partial-baseline comparison had to be
+brought back here.
+
+Containment is a **shared conformance corpus**, not discipline: the same recorded
+provider payloads, asserted to produce the same canonical Issue in both
+implementations, run by both CI suites. Divergence then fails a build instead of
+reaching a user. `handoff/PLAN.md` originally proposed golden fixtures as
+scaffolding for a port; they are promoted to a permanent shared asset.
+
+### Reconsider if
+
+The same provider bug has to be fixed in both implementations twice more. At that
+point duplicate maintenance has outgrown the dependency and latency costs, and a
+cutover — interactive paths excluded — becomes the better trade.
+
+## 25. Remaining open questions
 
 - Whether `.state/index/` should become SQLite once cross-issue search grows
   beyond ripgrep's comfort. The `.state/` layout is designed to absorb this

@@ -965,6 +965,20 @@ Issue IDs are RFC 3986 percent-encoded for path safety, so `PROJ-123` stays
 exactly that and only the rare `PROJ/123` becomes `PROJ%2F123` — the tree stays
 readable in oil.nvim, `git diff`, and `grep`.
 
+## Related: the `issuehub` CLI
+
+The same core exists as a standalone Python CLI at
+[`tya5/issuehub`](https://github.com/tya5/issuehub), for use outside Neovim — the
+shell, scripts, and analysis with pandas over the same workspace.
+
+**This plugin does not require it.** The two are independent implementations that
+read and write the same Git-managed workspace, kept consistent by a shared
+on-disk contract and conformance corpus. The plugin shells out to the CLI for one
+thing only — aggregation (`summarize`) — and degrades with a clear message when
+it is absent. Nothing else in the plugin depends on it.
+
+Reasoning, including the measurement that decided it: DESIGN.md §24.
+
 ## Documentation
 
 ```vim

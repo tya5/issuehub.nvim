@@ -1,8 +1,13 @@
 # How to proceed
 
-The method that de-risks this: **contract first, golden fixtures from the working
-Lua, phased port, conformance-tested each step.** Do not big-bang a 7000-line
-rewrite; each phase must be shippable and checked against the existing behaviour.
+**Phases 0-2 are done: the CLI exists.** Phase 3 (cutting the plugin over to it)
+is dropped — see DESIGN.md §24. What remains live in this document is
+§"Keeping the two implementations honest" and §"Live verification is the
+remaining gap"; the rest is kept as the record of how the port was done.
+
+The method that de-risked it: **contract first, golden fixtures from the working
+Lua, phased port, conformance-tested each step.** No big-bang rewrite; each phase
+shippable and checked against the existing behaviour.
 
 ## Repo layout for `tya5/issuehub`
 
@@ -88,32 +93,58 @@ recorded payloads before any live call. Then verify against a real instance
 (GitHub via `gh auth token` is the cheapest — that is how the Lua side was
 verified).
 
-**Phase 3 — cut nvim over.**
-See "Division of labour" below. Do this provider-surface by provider-surface, not
-all at once, so a regression is bisectable.
+**Phase 3 — ~~cut nvim over~~ → keep both, keep them honest.**
+**Superseded.** The cutover is dropped; see DESIGN.md §24 for the measurement and
+the reasoning. What replaces it is below.
 
-## Division of labour with `issuehub.nvim`
+## Keeping the two implementations honest
 
-The plugin keeps all UI and the AI/prompt/analysis features. Replace only the
-core calls. Concretely, in the Lua side:
+Two implementations of the same core means some bugs must be fixed twice. That is
+the accepted cost, and it is not hypothetical: a GitHub status-precedence bug (a
+draft PR closed without merging reading as open, while still carrying
+`closed_at`) existed in **both**, and the port's finer partial-baseline
+comparison had to be brought back to the Lua side.
 
-- `core/cache`, `core/index/*`, `core/listcache`, `core/sync`, `core/fetch`,
-  `core/search`, `core/export`, `core/collection`, and `provider/*` become **thin
-  shims that shell out** to `issuehub <verb> --json` (via `vim.system`) and parse
-  the JSON. Keep the module names and function signatures so the UI layer does
-  not change.
-- `core/overlay`, `core/workspace` (state.yaml), `core/repository` can **stay
-  Lua** and keep reading files directly — that keeps buffer rendering instant and
-  avoids a subprocess on every keystroke. The CLI and the plugin both touch these
-  files; ONDISK.md is the shared contract that lets them.
-- `core/analysis`, `backend/*`, `ui/*` are **unchanged** — the CLI has no prompt
-  surface by the user's decision.
-- Add a `checkhealth` line for the `issuehub` binary (present? version? contract
-  compatible?), the way `curl`/`sqlite3` are checked now.
+Containment is mechanical, not disciplinary:
 
-Guard the seam: the plugin should degrade to a clear "install the `issuehub` CLI"
-message when the binary is absent, exactly as it does for a missing picker —
-never a stack trace.
+1. **A shared conformance corpus.** The golden fixtures described above stop
+   being porting scaffolding and become a permanent, shared asset: recorded
+   provider payloads plus the canonical Issue each must normalise to. Both CI
+   suites run it. Divergence then fails a build instead of reaching a user — the
+   draft-PR case would have failed in both the moment it was added.
+   - Keep it in one place, vendored into the other repo (a small file set, so
+     copying beats a submodule) and refreshed when either side adds a case.
+   - Every bug found live becomes a corpus entry **before** it is fixed, in
+     whichever implementation found it. That is what makes the second
+     implementation cheap to correct rather than a place bugs hide.
+2. **ONDISK.md is the on-disk contract.** Both write the same workspace, so a
+   format change in either is a breaking change for the other. Change it in the
+   doc first.
+3. **The correctness ledger** (CORRECTNESS.md) stays the shared statement of
+   *why*, and gains an entry whenever live verification finds something.
+
+## What the plugin does call the CLI for
+
+Exactly one thing, and it is additive rather than a replacement: **analysis /
+aggregation** (`issuehub summarize`). Neovim is a poor place to build
+aggregation, Python is a good one, and the latency is irrelevant for a command
+that produces a report. If the CLI is absent, that one command degrades with a
+clear message and nothing else in the plugin is affected.
+
+Do **not** route the interactive path through the CLI — picker preview runs on
+every cursor move, and a subprocess there costs ~130 ms per keystroke.
+
+## Live verification is the remaining gap
+
+Both implementations are verified against GitHub only. Jira, Redmine, and GitLab
+are unverified live in **both**, and GitHub alone produced four real bugs that
+recorded fixtures and hundreds of tests had all passed through. The known
+suspect, already flagged: Jira's `resolutiondate` and Redmine's `closed_on` are
+not reliably cleared on reopen, which is the same shape as the GitHub
+`closed_at` contradiction. The Lua side now enforces "no `closed_at` unless
+closed" centrally in `issue.normalize` and tests it parameterised across all four
+providers (`spec/invariants_spec.lua`); mirror that placement rather than
+patching per provider.
 
 ## What to read in the Lua source
 
@@ -139,8 +170,17 @@ The Lua test suite (`spec/*_spec.lua`, 318 cases) is the behaviour spec. Read th
 relevant `_spec` alongside each module — the tests name the edge cases in
 English, which is faster than re-deriving them.
 
-## First concrete step
+## Next concrete step
 
-Copy these six docs into `tya5/issuehub/handoff/`, freeze CONTRACT.md, and do
-Phase 0. When `issuehub health --json` runs and the encode/parse fixtures pass,
-you have proven the loop and the rest is mechanical, one module at a time.
+The port is complete; the open work is keeping the two honest and closing the
+verification gap:
+
+1. **Promote the golden fixtures to a shared conformance corpus** run by both CI
+   suites, starting with the four bugs live verification already found (the
+   draft-PR precedence case, the partial-baseline sync case, and the two
+   CLI-surface ones that have no Lua equivalent).
+2. **Verify Jira, Redmine, and GitLab against real instances.** GitHub alone
+   produced four bugs that every recorded fixture had passed through; there is no
+   reason to expect the other three to be cleaner.
+3. **Wire `:IssueHub summarize`** in the plugin — the one place it calls the CLI,
+   degrading with a clear message when the binary is absent.

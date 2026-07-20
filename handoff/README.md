@@ -1,9 +1,26 @@
 # Extracting the core to `tya5/issuehub` — handoff
 
-This directory hands off a planned refactor to **a different session**: pull the
-non-UI core of `issuehub.nvim` out into a standalone **Python CLI** at
-`tya5/issuehub`, so the same logic is reusable outside Neovim. `issuehub.nvim`
-then becomes a thin client that shells out to it.
+This directory specified pulling the non-UI core of `issuehub.nvim` out into a
+standalone **Python CLI** at `tya5/issuehub`, so the same logic is reusable
+outside Neovim. That CLI now exists.
+
+> **STATUS: the CLI shipped; the plugin is NOT being cut over to it.**
+>
+> The original plan ended with `issuehub.nvim` becoming a thin client that shells
+> out to the CLI. **That final step is dropped** — see DESIGN.md §24 for the
+> measurement and the reasoning. The short version: the reuse goal is met by the
+> CLI existing, a subprocess costs ~130 ms per call (fatal on the picker's
+> per-keystroke preview), and the cutover would trade a tested implementation for
+> shims plus three new failure modes, breaking the zero-dependency principle.
+>
+> **The two implementations now stand side by side**, kept consistent by the
+> workspace format in [ONDISK.md](ONDISK.md) and a shared conformance corpus
+> ([PLAN.md](PLAN.md) §Keeping the two implementations honest). The plugin calls
+> the CLI only for what should not be built in Lua — analysis/aggregation.
+>
+> Everything else in these documents stands: they describe the shared semantics
+> both implementations must honour, which is now their *permanent* job rather
+> than a porting aid.
 
 These documents were written from the working Lua implementation, so they
 describe *what actually exists*, not an aspiration. Read them in this order.
@@ -27,9 +44,13 @@ genuine standalone CLI. The reusable seam is the **JSON contract**, not the
 language: get [CONTRACT.md](CONTRACT.md) right and the implementation behind it
 can be Python now and something else later.
 
-## Scope: what moves, what stays
+## Scope: what the CLI covers, what stays Lua-only
 
-**Moves to `tya5/issuehub` (Python CLI):**
+(Written as "moves" originally; with the cutover dropped, read it as *what each
+implementation is responsible for*. Both implement the first list; only the
+plugin implements the second.)
+
+**Implemented in both (the shared core the conformance corpus covers):**
 
 - Providers — HTTP, auth, the four trackers (Jira, Redmine, GitHub, GitLab),
   pagination.
@@ -39,7 +60,7 @@ can be Python now and something else later.
 - Export and summarisation (this is where `pandas` earns its place).
 - Local search (ripgrep / FTS5).
 
-**Stays in `issuehub.nvim` (Lua):**
+**Plugin-only (no CLI equivalent, and none wanted):**
 
 - All UI: picker adapters, the virtual issue buffer, rendering, the conversation
   window, `:checkhealth`, keymaps, commands.
@@ -50,11 +71,13 @@ can be Python now and something else later.
 
 ## Non-negotiables
 
-1. **The workspace is the interface between the two halves.** Plain files, Git-
-   managed. The CLI writes them, nvim reads them (and vice versa). Neither owns
-   the format; ONDISK.md does.
-2. **No hard runtime dependency beyond the one CLI binary.** The user accepted
-   "one tool on PATH" (like curl/sqlite3), and explicitly rejected a daemon. The
-   CLI is invoked per command and exits; it holds no long-lived process.
+1. **The workspace is the interface between the two implementations.** Plain
+   files, Git-managed. Either may write them; both must read what the other
+   wrote. Neither owns the format; ONDISK.md does. This matters more now than
+   under the cutover plan: the two run independently against the same directory.
+2. **The plugin has NO hard runtime dependency, including on the CLI.** It must
+   work with nothing installed (§1.3). The CLI is invoked per command and exits;
+   it holds no long-lived process. A missing CLI degrades one analysis command,
+   never the plugin.
 3. **Credentials never reach argv, logs, or disk.** This is a security invariant
    the Lua side upholds and the CLI must too. See CORRECTNESS.md §Credentials.
