@@ -133,6 +133,18 @@ CORRECTNESS §Merged export). Columns and their order are fixed (ONDISK §Export
 columns), including precomputed `age_days` / `days_to_close`. Returns the path
 written: `{ "path": "…/all.csv", "rows": 1240 }`.
 
+### `issuehub attachments <uri> [--fetch <id>|--all] [--json]`
+
+List an issue's attachments from the cache, and download on request only —
+never as a side effect of `sync` or `get` (ONDISK §Attachments).
+```json
+{ "attachments": [ { "id": "10001", "filename": "trace.log", "size": 2048,
+                     "downloaded": true, "path": "…/.state/attachments/…" } ] }
+```
+The storage path, the filename sanitisation, the `.part`-then-rename write, and
+the credential reuse are all specified in ONDISK §Attachments; none of them are
+implementation freedom.
+
 ### `issuehub import <file> [--dry-run] [--json]`
 
 Merge an exported CSV or JSON back into the workspace — the spreadsheet-triage

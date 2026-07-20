@@ -26,6 +26,8 @@ truth is `lua/issuehub/core/repository.lua` (paths), `core/cache.lua`,
 │   │   └── issues.json  OR  issues.db
 │   ├── lists/
 │   │   └── <provider>-<hash>.json
+│   ├── attachments/
+│   │   └── <provider>/<encoded-id>/<attachment-id>/<filename>
 │   └── lock/
 ├── .gitignore                        # written on init, contains "/.state/\n"
 └── <provider>/                       # one dir per provider INSTANCE (URI scheme)
@@ -85,6 +87,12 @@ so consumers never nil-check. JSON on the wire and in the cache:
   "assignee": "Tetsuya",        // or null
   "reporter": "Alice",          // or null
   "labels": ["timeout", "cache"],
+  "attachments": [             // metadata only; bytes are never in the cache JSON
+    { "id": "10001", "filename": "trace.log",
+      "url": "https://…/secure/attachment/10001/trace.log",
+      "size": 2048, "mime": "text/plain",
+      "author": "Ada", "created_at": "2026-07-19T01:00:00Z" }
+  ],
   "url": "https://.../browse/PROJ-123",
   "comments": [                 // [] for partial entries
     { "id": "1", "author": "Alice", "body": "...", "created_at": "…Z" }
@@ -124,6 +132,35 @@ by search.
   entry** — instead keep the complete `description`/`comments` (CORRECTNESS
   §Partial cache). A partial entry is always treated as stale.
 - Written **without fsync** (derived, rebuildable). Atomic via temp+rename.
+
+## Attachments (cache — deliberately NOT in the workspace)
+
+`.state/attachments/<provider>/<encoded-id>/<encoded-attachment-id>/<filename>`.
+
+- **Under `.state/` on purpose, and this one is not a performance choice.** A
+  binary cannot be removed from Git history once committed, and a screenshot
+  pasted into a ticket is often more sensitive than the ticket text. Every other
+  user-visible artefact is tracked; this one must not be. Do not "improve" it by
+  storing attachments beside `memo.md`.
+- **Nothing is fetched implicitly.** Sync stores attachment *metadata* on the
+  Issue; bytes transfer only on an explicit request. A CLI that pulls
+  attachments during a sync of a 20k-issue tracker is moving gigabytes nobody
+  asked for.
+- The attachment id is its own directory level so that two attachments sharing a
+  filename — a tracker routinely holds three `screenshot.png` — do not collide
+  while the human-readable name is still what appears on disk.
+- **The filename is remote input that becomes a path.** Reduce it to one
+  segment: strip everything up to the last `/` *and* the last `\` (a
+  Windows-authored name reaches a Unix client), reject `.`/`..`/empty, strip
+  leading dots so it cannot hide, cap the length. Refuse rather than invent when
+  nothing usable survives. `../../../.ssh/authorized_keys` must land as
+  `authorized_keys` or not at all.
+- **Bytes must never pass through the JSON response path.** Write with
+  `curl --output <dest>.part` and rename on success. Reading a binary as a text
+  response body, or splitting a status code off the end of it, corrupts it.
+- Fetch with the owning instance's credentials, proxy, and TLS settings. An
+  unauthenticated GET against a private tracker returns a login page that then
+  sits on disk pretending to be a PDF.
 
 ## Index
 

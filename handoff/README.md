@@ -54,7 +54,8 @@ plugin implements the second.)
 
 - Providers — HTTP, auth, the four trackers (Jira, Redmine, GitHub, GitLab),
   pagination.
-- Cache, index (SQLite + JSON fallback), list cache.
+- Cache, index (SQLite + JSON fallback), list cache, attachment fetch
+  (metadata in the cache, bytes on request only — ONDISK §Attachments).
 - Workspace: overlay (memo/metadata), `state.yaml`, collections.
 - Sync and change detection.
 - Export **and import** (ONDISK §Export columns, CORRECTNESS §Import), and

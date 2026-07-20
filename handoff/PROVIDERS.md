@@ -136,6 +136,35 @@ provider stashes the true total in `raw.comment_total` so sync can report
   path is URL-encoded into one segment (`group%2Fproject`). **Drop `system`
   notes** (audit trail). Newest N, rendered oldest-first.
 
+## Attachments
+
+Two shapes, and the difference is not cosmetic:
+
+- **Jira** — `fields.attachment[]`, requested by adding `attachment` to the
+  `fields` list (metadata only, no transfer). Use `content`, **not** `self`:
+  the latter is the metadata resource. Carries `size` and `mimeType`.
+- **Redmine** — `attachments[]`, but **only when `include=attachments` is
+  passed**; without it the array is simply absent, which is indistinguishable
+  from an issue that has none. Use `content_url`, `filesize`, `content_type`.
+- **GitHub and GitLab have no attachment API.** An upload is a Markdown link in
+  the issue body, so the body text is the only record. Consequences to preserve
+  rather than paper over: size and MIME are **unknown** (nil, not guessed), and
+  a hand-written link to an unrelated file on the same host is
+  indistinguishable from an upload.
+  - GitHub hosts: `github.com/user-attachments/assets/…`,
+    `github.com/<owner>/<repo>/files/<n>/…`, `*.githubusercontent.com`.
+    Asset URLs carry no filename — fall back to the link text.
+  - GitLab: `/uploads/<secret>/<filename>`, written **project-relative**.
+    Resolving it needs the project path from the issue's `web_url`; when that
+    is unavailable, drop the attachment rather than emit a URL that would
+    download the wrong project's file.
+  - The URL is the only stable identity, so derive the id from it (a truncated
+    hash) — it names a directory, so it must be stable across runs.
+- A GitHub asset on a private repository redirects to a signed storage URL on
+  another host. curl drops the Authorization header across hosts by design (it
+  must not leak the token to a CDN); the signature carries the authorisation
+  instead. Do not defeat this.
+
 ## Config field reference (per provider instance)
 
 `url`, `user` (jira cloud), `token` / `token_cmd` / `token_env`, `default_query`,

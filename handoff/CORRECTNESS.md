@@ -208,6 +208,20 @@ suite.** They are the difference between a port and a regression.
   `import_merge_metadata_key_reorder_counts_as_overwrite`,
   `import_merge_metadata_comment_loss_reported`.
 
+## Attachments
+
+- Metadata travels with the Issue; **bytes are fetched only on an explicit
+  request**, and are stored under `.state/` (never the workspace). Both rules
+  are in ONDISK §Attachments with the reasoning.
+- An entry missing any of id / filename / URL is dropped at normalisation:
+  listing something that cannot then be downloaded is worse than not listing
+  it.
+- Corpus-worthy cases, because each is a silent-corruption class rather than a
+  visible error: a filename that escapes its directory; two attachments sharing
+  a filename; a binary body round-tripped through the response path; an
+  interrupted download left in place; an unauthenticated fetch saving a login
+  page as a PDF.
+
 ## Repository / paths
 
 - Case-collision guard (above, ONDISK §URI). Percent-encode ids verbatim into
