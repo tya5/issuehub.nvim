@@ -1094,6 +1094,11 @@ fetches; `undownloaded` names anything the client should pull first with
 issuehub, with the same derived staleness as any analysis, even though another
 tool produced it.
 
+`fetch_attachments(uri, ids, cb)` is the programmatic pull — `context()` never
+reaches the network, this does, so the split between "what is on disk" and "go
+fetch" stays explicit. Already-downloaded files return immediately; per-file
+failures come back keyed by id, and `ids` is nil for all of them.
+
 ### Writing your own backend
 
 The interface anticipates more than issue analysis. Requests carry a **kind**,

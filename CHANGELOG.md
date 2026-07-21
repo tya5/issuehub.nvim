@@ -22,6 +22,11 @@ This project is pre-1.0: the public API may break between minor versions until
   because a remote model cannot open a path. `record_analysis()` keeps the
   agent's conclusion in the issue's history with the same derived staleness as
   any analysis. issuehub carries no dependency on the agent side.
+- **`fetch_attachments(uri, ids, cb)`** — the programmatic counterpart to
+  `context()`: `context()` never reaches the network, this fetches on request
+  (non-interactive), returns paths keyed by id, and reports per-file failures
+  without failing the whole call. Lets an agent client pull the files it will
+  reference by path before sending them.
 
 - **OpenAI-compatible backend** (`backend = "openai"`). Talks to any
   `POST /chat/completions` endpoint — OpenAI, a corporate gateway, Azure, a

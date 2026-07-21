@@ -96,6 +96,86 @@ describe("public context API", function()
   end)
 end)
 
+describe("fetch_attachments (programmatic)", function()
+  before_each(fresh)
+
+  it("returns already-downloaded paths immediately, keyed by id", function()
+    cache.put(make({ { id = "1", filename = "a.log", url = "https://x/1" } }))
+    local path = attachment.list(URI)[1].path
+    fs.mkdirp(vim.fs.dirname(path))
+    fs.write(path, "bytes")
+
+    local got
+    issuehub.fetch_attachments(URI, { "1" }, function(res, err)
+      got = { res = res, err = err }
+    end)
+    assert.is_nil(got.err)
+    assert.equals(path, got.res.paths["1"])
+    assert.same({}, got.res.failed)
+  end)
+
+  it("fetches all of them when no ids are given", function()
+    cache.put(make({
+      { id = "1", filename = "a.log", url = "https://x/1" },
+      { id = "2", filename = "b.log", url = "https://x/2" },
+    }))
+    for _, att in ipairs(attachment.list(URI)) do
+      fs.mkdirp(vim.fs.dirname(att.path))
+      fs.write(att.path, "bytes")
+    end
+    local got
+    issuehub.fetch_attachments(URI, nil, function(res)
+      got = res
+    end)
+    assert.equals(2, vim.tbl_count(got.paths))
+  end)
+
+  it("reports an unknown id in failed rather than hanging the count", function()
+    cache.put(make({ { id = "1", filename = "a.log", url = "https://x/1" } }))
+    local path = attachment.list(URI)[1].path
+    fs.mkdirp(vim.fs.dirname(path))
+    fs.write(path, "b")
+
+    local got
+    issuehub.fetch_attachments(URI, { "1", "99" }, function(res)
+      got = res
+    end)
+    assert.truthy(got.paths["1"])
+    assert.equals("no such attachment", got.failed["99"])
+  end)
+
+  it("puts a download failure in failed, not the precondition error", function()
+    -- No provider configured for this URI, so the fetch cannot succeed — that is
+    -- a per-file failure, not a reason to fail the whole call.
+    cache.put(make({ { id = "1", filename = "a.log", url = "https://x/1" } }))
+    local got
+    issuehub.fetch_attachments(URI, { "1" }, function(res, err)
+      got = { res = res, err = err }
+    end)
+    assert.is_nil(got.err)
+    assert.is_nil(got.res.paths["1"])
+    assert.truthy(got.res.failed["1"])
+  end)
+
+  it("does nothing gracefully when there are no attachments", function()
+    cache.put(make())
+    local got = "unset"
+    issuehub.fetch_attachments(URI, nil, function(res)
+      got = res
+    end)
+    assert.same({ paths = {}, failed = {} }, got)
+  end)
+
+  it("rejects a bad URI through the error argument", function()
+    local got
+    issuehub.fetch_attachments("nonsense", nil, function(res, err)
+      got = { res = res, err = err }
+    end)
+    assert.is_nil(got.res)
+    assert.truthy(got.err)
+  end)
+end)
+
 describe("recording an analysis from an external client", function()
   before_each(fresh)
 

@@ -958,6 +958,75 @@ function M.context(uri, opts)
   return context
 end
 
+---Ensure attachments are on disk, and hand back their paths — programmatically.
+---
+--- The counterpart to `M.context` for a client (reyn.nvim, a script) that wants
+--- the FILES, not just the metadata. `M.context` reports what is on disk and
+--- never fetches; this fetches on request, so the two stay honest about which
+--- one reaches the network. Non-interactive by design: no notifications, no
+--- opening — just the callback, so it composes inside another tool's flow.
+---
+--- Already-downloaded attachments return immediately (no network). Per-file
+--- failures land in `failed` keyed by id; only a precondition failure (bad URI)
+--- returns through the second value. `ids` is nil/empty for "all of them".
+---@param uri string
+---@param ids string[]?
+---@param cb fun(result: { paths: table<string,string>, failed: table<string,string> }?, err: string?)
+function M.fetch_attachments(uri, ids, cb)
+  if not uri or not require("issuehub.core.issue").is_uri(uri) then
+    return cb(nil, ("not a valid issue URI: %s"):format(tostring(uri)))
+  end
+
+  local attachment = require("issuehub.core.attachment")
+  local by_id = {}
+  for _, att in ipairs(attachment.list(uri)) do
+    by_id[att.id] = att
+  end
+
+  -- Resolve the target set: the requested ids, or everything the issue has.
+  local wanted = {}
+  if ids and #ids > 0 then
+    for _, id in ipairs(ids) do
+      wanted[#wanted + 1] = tostring(id)
+    end
+  else
+    for id in pairs(by_id) do
+      wanted[#wanted + 1] = id
+    end
+  end
+
+  local result = { paths = {}, failed = {} }
+  local pending = #wanted
+  if pending == 0 then
+    return cb(result)
+  end
+
+  local function settle()
+    pending = pending - 1
+    if pending == 0 then
+      cb(result)
+    end
+  end
+
+  for _, id in ipairs(wanted) do
+    local att = by_id[id]
+    if not att then
+      -- An id the issue does not carry: report it rather than hang the count.
+      result.failed[id] = "no such attachment"
+      settle()
+    else
+      attachment.fetch(uri, att, function(err, path)
+        if path then
+          result.paths[id] = path
+        else
+          result.failed[id] = err or "download failed"
+        end
+        settle()
+      end)
+    end
+  end
+end
+
 ---Save an analysis produced elsewhere (an agent client, a script) into this
 ---issue's history — so the knowledge stays in issuehub even when another tool
 ---did the analysing. A thin, deliberate counterpart to `M.context`.
