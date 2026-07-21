@@ -47,6 +47,7 @@ local M = {}
 local BUILTIN = {
   none = "issuehub.backend.none",
   a2a = "issuehub.backend.a2a",
+  openai = "issuehub.backend.openai",
 }
 
 ---@type table<string, issuehub.Backend>

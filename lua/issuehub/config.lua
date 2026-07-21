@@ -76,6 +76,7 @@ local defaults = {
   backend = "none",
   backends = {
     -- a2a = { url = "http://localhost:9100", token_env = "A2A_TOKEN" },
+    -- openai = { url = "https://gateway/v1", model = "gpt-4o-mini", token_env = "OPENAI_API_KEY" },
   },
 
   log_level = vim.log.levels.WARN,
@@ -176,6 +177,14 @@ local function validate(opts, raw)
     errors[#errors + 1] = "backend must be a string"
   elseif opts.backend == "a2a" and not (opts.backends.a2a or {}).url then
     errors[#errors + 1] = "backend = 'a2a' requires backends.a2a.url"
+  elseif opts.backend == "openai" then
+    local b = opts.backends.openai or {}
+    if not b.url then
+      errors[#errors + 1] = "backend = 'openai' requires backends.openai.url (e.g. https://gateway/v1)"
+    end
+    if not b.model then
+      errors[#errors + 1] = "backend = 'openai' requires backends.openai.model (e.g. gpt-4o-mini)"
+    end
   end
 
   -- Self-hosted-only providers have no sensible default host; the SaaS ones do.

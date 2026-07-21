@@ -8,6 +8,20 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ## [Unreleased]
 
+### Added
+
+- **OpenAI-compatible backend** (`backend = "openai"`). Talks to any
+  `POST /chat/completions` endpoint — OpenAI, a corporate gateway, Azure, a
+  local llama.cpp/vLLM/Ollama — over the same curl transport as the providers,
+  so the API key travels on stdin (never argv) and it works wherever curl does,
+  Windows included. Accepts either the `/v1` base or the full endpoint; Bearer
+  by default with `api_key_header` + `query` passthrough for Azure-style
+  gateways; per-request `model`/`system` override via request metadata. Handles
+  `analyze`, `complete`, and `translate` identically, so `:IssueHub translate`
+  is one action with no special agent capability. The request renderer is now
+  shared with the A2A backend (`backend/message.lua`), so an analysis reads the
+  same whichever backend produced it.
+
 ### Fixed
 
 - **Issue buffers now get Markdown highlighting.** The buffer is Markdown but

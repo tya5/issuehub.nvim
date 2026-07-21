@@ -598,12 +598,32 @@ forcing multi-line text into table cells.
 
 issuehub has no AI of its own. A Backend is the only channel through which
 anything leaves your machine, and the default is `none`: nothing is sent
-anywhere unless you configure it. >lua
+anywhere unless you configure it.
+
+For any endpoint that speaks the OpenAI chat-completions shape — OpenAI, a
+corporate gateway, Azure, a local llama.cpp/vLLM/Ollama — use `openai`: >lua
+    backend = "openai",
+    backends = {
+      openai = {
+        url = "https://gateway.corp/v1",  -- /v1 base or the full endpoint
+        model = "gpt-4o-mini",
+        token_env = "OPENAI_API_KEY",     -- or token_cmd; Bearer by default
+        -- system = "...",                -- optional system prompt
+        -- api_key_header = "api-key",     -- Azure key header, not Bearer
+        -- query = { ["api-version"] = "2024-02-01" },  -- Azure
+      },
+    }
+<
+It rides the same curl transport as the providers, so the key travels on stdin
+(never argv) and it works wherever curl does, Windows included. For an A2A
+agent instead: >lua
     backend = "a2a",
     backends = { a2a = { url = "http://localhost:9100" } },
 <
 `:IssueHub analyze` sends the cached issue plus your overlay, using the
-issue's own `prompt.md` when you have written one.
+issue's own `prompt.md` when you have written one. `:IssueHub translate
+<lang>` is one action against the same backend — the model handles it as a
+completion, so no special agent capability is required.
 
                                                        *issuehub-staleness*
 Every analysis is kept under `analyses/<timestamp>/` with its prompt, its

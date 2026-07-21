@@ -98,54 +98,13 @@ end
 
 ---Render a request as the single text part A2A carries.
 ---
---- The Workspace is included as labelled sections rather than raw JSON, because
---- the receiver is a model and prose survives better than a serialized table.
+--- Delegates to the shared renderer (`backend/message`), so an analysis reads
+--- the same whether A2A or another backend produced it. Kept as `M.render` for
+--- the callers and specs that already reference it.
 ---@param req issuehub.Request
 ---@return string
 function M.render(req)
-  local parts = {}
-
-  local context = req.context or {}
-  local issue = context.issue
-  if issue then
-    parts[#parts + 1] = ("# %s  %s"):format(issue.id or "", issue.title or "")
-    parts[#parts + 1] = ("Status: %s\nAssignee: %s\nURL: %s"):format(
-      issue.status and issue.status.name or "?",
-      issue.assignee or "-",
-      issue.url or "-"
-    )
-    if issue.description and issue.description ~= "" then
-      parts[#parts + 1] = "## Description\n\n" .. issue.description
-    end
-    if issue.comments and #issue.comments > 0 then
-      local comments = {}
-      for _, comment in ipairs(issue.comments) do
-        comments[#comments + 1] = ("- %s: %s"):format(comment.author or "?", comment.body or "")
-      end
-      parts[#parts + 1] = "## Comments\n\n" .. table.concat(comments, "\n")
-    end
-  end
-
-  local overlay = context.overlay
-  if overlay then
-    if overlay.memo and overlay.memo ~= "" then
-      parts[#parts + 1] = "## Memo\n\n" .. overlay.memo
-    end
-    if overlay.metadata and overlay.metadata ~= "" then
-      parts[#parts + 1] = "## Metadata\n\n```yaml\n" .. overlay.metadata .. "\n```"
-    end
-  end
-
-  for _, document in ipairs(context.documents or {}) do
-    parts[#parts + 1] = ("## %s\n\n%s"):format(document.name, document.text)
-  end
-
-  if context.selection and context.selection ~= "" then
-    parts[#parts + 1] = "## Selection\n\n" .. context.selection
-  end
-
-  parts[#parts + 1] = "## Task\n\n" .. req.prompt
-  return table.concat(parts, "\n\n")
+  return require("issuehub.backend.message").render(req)
 end
 
 ---@param body table

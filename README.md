@@ -1003,6 +1003,27 @@ commit, not derived state that a reindex can lose.
 anything leaves your machine, and the default is `none`: nothing is sent
 anywhere unless you configure it.
 
+For any **OpenAI-compatible** endpoint — OpenAI, a corporate gateway, Azure, a
+local llama.cpp/vLLM/Ollama:
+
+```lua
+backend = "openai",
+backends = {
+  openai = {
+    url = "https://gateway.corp/v1",   -- the /v1 base, or the full endpoint
+    model = "gpt-4o-mini",
+    token_env = "OPENAI_API_KEY",      -- or token_cmd; Bearer by default
+    -- system = "You are terse.",       -- optional
+    -- api_key_header = "api-key",       -- Azure-style key header instead of Bearer
+    -- query = { ["api-version"] = "2024-02-01" },  -- Azure
+  },
+},
+```
+
+It uses the same curl transport as the providers, so the key travels on stdin
+(never argv) and it works wherever curl does — Windows included. For an **A2A
+agent** instead:
+
 ```lua
 backend = "a2a",
 backends = {
