@@ -8,6 +8,16 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ## [Unreleased]
 
+### Fixed
+
+- **Issue buffers now get Markdown highlighting.** The buffer is Markdown but
+  keeps the `issuehub` filetype (so opening one does not pull in your whole
+  Markdown setup onto a read-only buffer); the ftplugin simply never started a
+  highlighter. It now attaches the Tree-sitter Markdown parser when installed,
+  and falls back to the legacy `syntax=markdown` otherwise — deferred, because
+  `:syntax on` resets `syntax` to the filetype in the same event. Folding falls
+  back to a heading expression on the non-Tree-sitter path too.
+
 ### Added
 
 - **Username/password (HTTP Basic) authentication.** For self-hosted Jira and
