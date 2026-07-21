@@ -93,6 +93,7 @@ local did_setup = false
 
 ---Resolved tokens, cached for the session only. Never written to disk.
 local token_cache = {}
+local password_cache = {}
 
 ---@return issuehub.Config
 function M.get()
@@ -195,6 +196,23 @@ local function validate(opts, raw)
       elseif p.url == nil and URL_REQUIRED[kind] then
         errors[#errors + 1] = ("providers.%s.url is required"):format(name)
       end
+
+      -- Basic auth needs both halves; a password with no username silently
+      -- resolves to nothing useful, which is worse than saying so now.
+      local has_password = p.password ~= nil or p.password_cmd ~= nil or p.password_env ~= nil
+      if has_password and not p.user then
+        errors[#errors + 1] = ("providers.%s: password is set but user is not — Basic auth needs both"):format(name)
+      end
+      if type(p.password) == "string" then
+        -- Accepted (refusing it would make curl prompt and hang), but a plain
+        -- password in a config file is exactly what password_env/_cmd exist to
+        -- avoid.
+        require("issuehub.util.log").warn(
+          ("providers.%s.password is a literal string in your config — prefer password_env or password_cmd"):format(
+            name
+          )
+        )
+      end
     end
   end
 
@@ -213,6 +231,8 @@ function M.setup(opts)
   local errors = validate(options, opts or {})
   did_setup = true
   token_cache = {}
+  password_cache = {}
+  password_cache = {}
   return errors
 end
 
@@ -299,6 +319,63 @@ function M.token(provider)
 
   token_cache[provider] = token
   return token
+end
+
+---Whether a provider is configured for HTTP Basic (username + password) rather
+---than a token.
+---
+--- Self-hosted Jira and Redmine that never issue API tokens authenticate this
+--- way; the transport has always supported it (curl `user =`), this is the
+--- config seam. Both `user` and a password source must be present — a password
+--- without a username cannot form a Basic credential.
+---@param provider string
+---@return boolean
+function M.password_configured(provider)
+  local p = options.providers[provider]
+  if not p then
+    return false
+  end
+  return p.password ~= nil or p.password_cmd ~= nil or p.password_env ~= nil
+end
+
+---Resolve a provider's password, same triple as any other credential.
+---@param provider string
+---@return string? password
+---@return string? err
+function M.password(provider)
+  if password_cache[provider] then
+    return password_cache[provider]
+  end
+  local p = options.providers[provider]
+  if not p then
+    return nil, ("no configuration for provider '%s'"):format(provider)
+  end
+  local password, err = M.secret(p, "password", "providers." .. provider)
+  if not password then
+    return nil, err
+  end
+  password_cache[provider] = password
+  return password
+end
+
+---The HTTP Basic credential for a provider, or nil when it is not in Basic mode.
+---
+--- Returns `nil` (no error) when the provider uses a token; returns `nil, err`
+--- when it IS in Basic mode but the password will not resolve, so a caller can
+--- tell "not basic" from "basic but broken".
+---@param provider string
+---@return issuehub.HttpAuth? auth
+---@return string? err
+function M.basic_auth(provider)
+  local p = options.providers[provider]
+  if not p or not p.user or not M.password_configured(provider) then
+    return nil
+  end
+  local password, err = M.password(provider)
+  if not password then
+    return nil, err
+  end
+  return { basic = ("%s:%s"):format(p.user, password) }
 end
 
 ---Network settings for a provider: the global `http` block with the provider's
@@ -389,6 +466,23 @@ function M.token_status(provider)
     return false, err or "unresolved"
   end
   return true, ("resolved (%d characters)"):format(#token)
+end
+
+---What :checkhealth reports for a provider's credential — Basic or token —
+---never the value itself.
+---@param provider string
+---@return boolean ok
+---@return string msg
+function M.credential_status(provider)
+  local p = options.providers[provider]
+  if p and p.user and M.password_configured(provider) then
+    local password, err = M.password(provider)
+    if not password then
+      return false, err or "password unresolved"
+    end
+    return true, ("basic auth as %s, password resolved (%d characters)"):format(p.user, #password)
+  end
+  return M.token_status(provider)
 end
 
 return M

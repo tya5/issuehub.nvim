@@ -85,10 +85,13 @@
 ---@field type string?         Implementation to use; defaults to the config key.
 ---@field url string?          Required for jira/redmine; defaults for github/gitlab
 ---@field web_url string?      GitHub Enterprise: browser host, if it differs from the API host
----@field user string?
+---@field user string?         Login name / email. Required for Basic auth and Jira Cloud.
 ---@field token_env string?
 ---@field token_cmd string[]?
 ---@field token (fun(): string?)?
+---@field password_env string?  HTTP Basic: password from an env var (with `user`).
+---@field password_cmd string[]?
+---@field password (fun(): string?)?  Discouraged as a literal string.
 ---@field default_query any?
 ---@field projects string[]?   Restrict this instance to these projects.
 ---@field default_project string?

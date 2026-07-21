@@ -237,6 +237,44 @@ Each instance has its own credential, its own default query, and its own network
 settings. `:IssueHub open` prompts for the instance when more than one is
 configured.
 
+### Credentials
+
+The preferred credential is a per-user **API token** (`token_env` /
+`token_cmd`), because a token is revocable and never becomes your login
+password. For Redmine that is the key under *My account → API access key*; for
+Jira Server/DC a *Personal Access Token*; for Jira Cloud an *API token* paired
+with your email in `user`.
+
+Some self-hosted instances issue no tokens at all. For those, **HTTP Basic —
+username and password** — is supported: set `user` plus a password source.
+
+```lua
+providers = {
+  redmine_a = {
+    type = "redmine",
+    url = "https://redmine-a.corp.example",
+    user = "your-login",
+    password_env = "REDMINE_A_PASSWORD",   -- or password_cmd = { "pass", "show", "redmine-a" }
+  },
+  jira = {
+    url = "https://jira.corp.example",     -- self-hosted Server/DC
+    user = "your-login",
+    password_cmd = { "pass", "show", "jira" },
+  },
+}
+```
+
+The password resolves the same three ways a token does — `_env`, `_cmd`, or a
+function — in that order of preference. A **literal** `password = "…"` works but
+warns, because it sits in your config in plaintext; `password_env` /
+`password_cmd` keep it out. However it is supplied, the password travels to
+curl through its config on **stdin**, never as a command-line argument (which
+`ps` would expose), and `:checkhealth issuehub` reports only that it *resolved*,
+never the value.
+
+Basic auth needs both halves: `user` **and** a password source. When both a
+token and a password are configured on one instance, the password wins.
+
 ### Issue IDs
 
 GitHub and GitLab IDs are repository-qualified so one workspace can span many

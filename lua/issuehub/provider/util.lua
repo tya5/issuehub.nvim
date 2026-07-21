@@ -14,12 +14,38 @@ local M = {}
 ---@field base string          Base URL, no trailing slash.
 ---@field http table           Injectable transport (specs substitute a fake).
 ---@field auth fun(token: string): table  Returns { auth = … } or { headers = … }.
+---@field opts table?          The provider's config, for Basic-auth detection.
 
 ---Normalize a configured URL: strip trailing slashes so path joins are safe.
 ---@param url string
 ---@return string
 function M.base_url(url)
   return (url:gsub("/+$", ""))
+end
+
+---Resolve a provider's credential: HTTP Basic when username + password are
+---configured, otherwise the provider's token shape.
+---
+--- Basic is what a self-hosted Jira or Redmine that never issues tokens
+--- requires. When both a password and a token are configured, Basic wins —
+--- someone who set a username and password meant to use them.
+---@param ctx issuehub.ProviderCtx
+---@return table? credential  { auth = …, headers = … }
+---@return string? err
+function M.credential(ctx)
+  local opts = ctx.opts or {}
+  if opts.user and config.password_configured(ctx.name) then
+    local auth, err = config.basic_auth(ctx.name)
+    if not auth then
+      return nil, err or "basic auth password unresolved"
+    end
+    return { auth = auth }
+  end
+  local token, terr = config.token(ctx.name)
+  if not token then
+    return nil, terr
+  end
+  return ctx.auth(token)
 end
 
 ---Issue a request, resolving the credential first.
@@ -34,12 +60,11 @@ end
 function M.call(ctx, path, opts, cb)
   opts = opts or {}
 
-  local token, terr = config.token(ctx.name)
-  if not token then
+  local credentials, terr = M.credential(ctx)
+  if not credentials then
     return cb(terr)
   end
 
-  local credentials = ctx.auth(token)
   local headers =
     vim.tbl_extend("force", { Accept = "application/json" }, opts.headers or {}, credentials.headers or {})
 
@@ -120,11 +145,10 @@ end
 ---@return issuehub.HttpRequest?
 ---@return string? err
 function M.attachment_request(ctx, url)
-  local token, terr = config.token(ctx.name)
-  if not token then
+  local credentials, terr = M.credential(ctx)
+  if not credentials then
     return nil, terr
   end
-  local credentials = ctx.auth(token)
   return {
     url = url,
     auth = credentials.auth,
@@ -207,7 +231,7 @@ end
 ---@return boolean ok
 ---@return string msg
 function M.health(ctx, detail)
-  local ok, msg = config.token_status(ctx.name)
+  local ok, msg = config.credential_status(ctx.name)
   if not ok then
     return false, msg
   end

@@ -40,6 +40,7 @@ function GitLab:_ctx()
     name = self.name,
     base = self.base,
     http = self.http,
+    opts = self.opts,
     auth = function(token)
       -- PRIVATE-TOKEN accepts both personal and project access tokens; it goes
       -- into the curl config on stdin like any other credential.

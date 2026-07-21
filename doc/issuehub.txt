@@ -163,6 +163,25 @@ Tokens are cached in memory for the session only, are passed to curl on stdin
 the log file. `:checkhealth` reports whether a credential resolves, never its
 value.
 
+USERNAME AND PASSWORD ~
+
+Prefer a token; a token is revocable and is not your login password. But a
+self-hosted Jira or Redmine that issues no tokens can authenticate with HTTP
+Basic instead — set `user` plus a password source: >lua
+    redmine_a = {
+      type = "redmine",
+      url = "https://redmine-a.corp.example",
+      user = "your-login",
+      password_env = "REDMINE_A_PASSWORD",
+    }
+<
+`password_env` / `password_cmd` / a `password` function resolve exactly as the
+token triple does. A literal `password = "..."` works but warns — it sits in
+your config in plaintext. Either way the password reaches curl on stdin, never
+argv, and `:checkhealth` reports only that it resolved. Basic auth needs both
+`user` and a password; when both a token and a password are set, the password
+wins.
+
 ==============================================================================
 4.1 TYPICAL WORKFLOW                                       *issuehub-usage*
 

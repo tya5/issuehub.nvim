@@ -44,6 +44,7 @@ function GitHub:_ctx()
     name = self.name,
     base = self.base,
     http = self.http,
+    opts = self.opts,
     auth = function(token)
       return {
         auth = { bearer = token },

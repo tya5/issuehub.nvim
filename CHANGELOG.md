@@ -10,6 +10,18 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ### Added
 
+- **Username/password (HTTP Basic) authentication.** For self-hosted Jira and
+  Redmine that issue no API tokens: set `user` plus `password_env`,
+  `password_cmd`, or a `password` function, resolved in exactly the same order
+  and cached the same way as a token. The transport already spoke Basic; this
+  opens the config seam. The password reaches curl on stdin, never argv; a
+  literal `password = "..."` is accepted but warns; `:checkhealth` reports the
+  mode (`basic auth as <user>`) and that it resolved, never the value. Basic
+  needs both `user` and a password, and when both a token and a password are
+  configured the password wins. Token auth is unchanged and still preferred.
+
+### Added
+
 - **Cross-process locking.** The workspace is written by this plugin, by the
   `issuehub` CLI, and by a human in a text editor, concurrently and by design —
   without a protocol, each side's read-modify-write silently drops the others'.

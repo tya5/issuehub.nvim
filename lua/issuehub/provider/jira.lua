@@ -42,10 +42,15 @@ function Jira:setup(opts)
   return true
 end
 
----Cloud uses Basic auth with an email + API token; Server/DC uses a bearer PAT.
+---Three modes. Basic username+password for a self-hosted instance that issues
+---no tokens (checked first: someone who set a password meant to use it); Cloud's
+---email + API token, also Basic; Server/DC's bearer PAT otherwise.
 ---@return issuehub.HttpAuth? auth
 ---@return string? err
 function Jira:_auth()
+  if self.opts.user and config.password_configured(self.name) then
+    return config.basic_auth(self.name)
+  end
   local token, err = config.token(self.name)
   if not token then
     return nil, err
@@ -282,7 +287,7 @@ function Jira:health()
   if not self.opts then
     return false, "not configured"
   end
-  local ok, msg = config.token_status(self.name)
+  local ok, msg = config.credential_status(self.name)
   if not ok then
     return false, msg
   end
