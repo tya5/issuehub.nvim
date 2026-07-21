@@ -40,6 +40,25 @@
 ---@field closed_at string?    When it was resolved; nil while open.
 ---@field raw table
 
+---@class issuehub.ContextAttachment
+---@field id string
+---@field filename string
+---@field path string        Local path; valid once `downloaded` is true.
+---@field downloaded boolean
+---@field size integer?
+---@field mime string?
+---@field url string
+
+---@class issuehub.IssueContext  What issuehub knows about an issue, for an agent client.
+---@field uri string
+---@field issue issuehub.Issue?      nil when the issue is not cached yet.
+---@field cached boolean
+---@field overlay table              { memo, metadata, prompt } as text.
+---@field attachments issuehub.ContextAttachment[]  Given as PATHS, not content.
+---@field undownloaded string[]      Attachment ids whose bytes are not local yet.
+---@field analyses table[]?          Present when requested.
+---@field translations table[]?      Present when requested.
+
 ---@class issuehub.ViewItem
 ---@field uri string
 ---@field id string

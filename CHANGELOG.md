@@ -10,6 +10,19 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ### Added
 
+- **Public API for an agent client** (`require("issuehub").context(uri)` and
+  `record_analysis(uri, data)`). issuehub is an information provider and
+  knowledge store; a conversational agent reached over a protocol like AG-UI —
+  by a separate client such as reyn.nvim — is the analysis engine. `context()`
+  hands over the issue, the overlay, and **attachments as file paths rather than
+  content**, so an agent that shares the filesystem reads them itself instead of
+  paying to embed a log in the prompt; it reports what is on disk and never
+  fetches, naming undownloaded attachments for the caller to pull. This is the
+  deliberate opposite of the backend message path, where text is embedded
+  because a remote model cannot open a path. `record_analysis()` keeps the
+  agent's conclusion in the issue's history with the same derived staleness as
+  any analysis. issuehub carries no dependency on the agent side.
+
 - **OpenAI-compatible backend** (`backend = "openai"`). Talks to any
   `POST /chat/completions` endpoint — OpenAI, a corporate gateway, Azure, a
   local llama.cpp/vLLM/Ollama — over the same curl transport as the providers,

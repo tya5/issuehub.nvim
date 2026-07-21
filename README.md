@@ -1067,6 +1067,33 @@ while Neovim was closed. The issue header shows it:
 An outdated analysis is also never fed back in as context for a new one, since
 that would propagate its staleness.
 
+### Feeding an agent client (reyn.nvim, etc.)
+
+issuehub is an **information provider and knowledge store**; a conversational
+agent — reached over a protocol like AG-UI by a separate client such as
+`reyn.nvim` — is the analysis engine. Two public functions are the seam, and
+issuehub carries no dependency on the agent side:
+
+```lua
+-- What issuehub knows about an issue, for the client to hand to the agent.
+local ctx = require("issuehub").context("jira://PROJ-1", { include_analyses = true })
+
+-- Save what the agent concluded back into the issue's history.
+require("issuehub").record_analysis("jira://PROJ-1", {
+  response = "...", backend = "reyn", model = "gpt-5.6",
+})
+```
+
+`context()` gives **attachments as file paths, not content** — an agent that
+shares the filesystem opens them itself, which is the point: embedding a log in
+the prompt is the token cost worth avoiding. (This is the opposite of what a
+remote model needs, so the backend path in the section above embeds text
+instead — a model cannot open a path.) It reports what is on disk and never
+fetches; `undownloaded` names anything the client should pull first with
+`:IssueHub attachments`. `record_analysis()` keeps the resulting knowledge in
+issuehub, with the same derived staleness as any analysis, even though another
+tool produced it.
+
 ### Writing your own backend
 
 The interface anticipates more than issue analysis. Requests carry a **kind**,

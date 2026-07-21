@@ -888,6 +888,101 @@ function M._fetch_attachments(uri, items, opts)
   end
 end
 
+---The knowledge issuehub holds about an issue, assembled for another tool.
+---
+--- This is the seam for a conversational agent client (e.g. reyn.nvim over
+--- AG-UI): issuehub is the information provider and knowledge store, the agent
+--- is the analysis engine. The two rules that shape this return are deliberate:
+---
+--- 1. **Attachments are given as file PATHS, not content.** An agent that shares
+---    the filesystem reads them itself, which is the whole point — embedding a
+---    log in the prompt is exactly the token cost worth avoiding. This is the
+---    opposite of what a remote model needs (`backend/message` embeds text,
+---    because a model cannot open a path), so the two paths are kept separate on
+---    purpose.
+--- 2. **It reports what is on disk, it does not fetch.** Downloading stays
+---    explicit (`:IssueHub attachments`); `undownloaded` lists what the caller
+---    must fetch first if it needs those bytes, rather than this function
+---    reaching out on its behalf.
+---@param uri string
+---@param opts { include_analyses: boolean?, include_translations: boolean? }?
+---@return issuehub.IssueContext? context
+---@return string? err
+function M.context(uri, opts)
+  opts = opts or {}
+  if not uri or not require("issuehub.core.issue").is_uri(uri) then
+    return nil, ("not a valid issue URI: %s"):format(tostring(uri))
+  end
+
+  local cache = require("issuehub.core.cache")
+  local attachment = require("issuehub.core.attachment")
+  local entry = cache.get(uri)
+
+  local attachments, undownloaded = {}, {}
+  for _, att in ipairs(attachment.list(uri)) do
+    attachments[#attachments + 1] = {
+      id = att.id,
+      filename = att.filename,
+      -- Present whether or not the bytes are here yet; `downloaded` says which.
+      path = att.path,
+      downloaded = att.downloaded,
+      size = att.size or att.bytes,
+      mime = att.mime,
+      url = att.url,
+    }
+    if not att.downloaded then
+      undownloaded[#undownloaded + 1] = att.id
+    end
+  end
+
+  local context = {
+    uri = uri,
+    issue = entry and entry.issue or nil,
+    cached = entry ~= nil,
+    overlay = require("issuehub.core.overlay").read(uri),
+    attachments = attachments,
+    undownloaded = undownloaded,
+  }
+
+  if opts.include_analyses then
+    context.analyses = require("issuehub.core.analysis").list(uri)
+  end
+  if opts.include_translations then
+    local translation = require("issuehub.core.translation")
+    context.translations = {}
+    for _, lang in ipairs(translation.languages(uri)) do
+      context.translations[#context.translations + 1] = translation.get(uri, lang)
+    end
+  end
+
+  return context
+end
+
+---Save an analysis produced elsewhere (an agent client, a script) into this
+---issue's history — so the knowledge stays in issuehub even when another tool
+---did the analysing. A thin, deliberate counterpart to `M.context`.
+---@param uri string
+---@param data { prompt: string?, response: string, backend: string?, model: string? }
+---@return string? stamp
+---@return string? err
+function M.record_analysis(uri, data)
+  if not uri or not require("issuehub.core.issue").is_uri(uri) then
+    return nil, ("not a valid issue URI: %s"):format(tostring(uri))
+  end
+  if type(data) ~= "table" or type(data.response) ~= "string" or data.response == "" then
+    return nil, "an analysis needs a non-empty response"
+  end
+  -- analysis.save writes prompt.md unconditionally; an external caller may not
+  -- have one, so give it an honest placeholder rather than crash on nil.
+  return require("issuehub.core.analysis").save(uri, {
+    prompt = data.prompt or "(analysis recorded from an external client)",
+    prompt_source = "external",
+    response = data.response,
+    backend = data.backend,
+    model = data.model,
+  })
+end
+
 ---Browse an issue's stored translations.
 ---@param uri string?
 function M.translations(uri)
