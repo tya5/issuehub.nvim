@@ -18,7 +18,10 @@ This project is pre-1.0: the public API may break between minor versions until
   by default with `api_key_header` + `query` passthrough for Azure-style
   gateways; per-request `model`/`system` override via request metadata. Handles
   `analyze`, `complete`, and `translate` identically, so `:IssueHub translate`
-  is one action with no special agent capability. The request renderer is now
+  is one action with no special agent capability. Reasoning models (GPT-5
+  family, o-series) work as-is: the default request sends only model, messages,
+  and stream — no temperature or max_tokens — and `max_completion_tokens` is
+  supported for capping output on models that renamed it. The request renderer is now
   shared with the A2A backend (`backend/message.lua`), so an analysis reads the
   same whichever backend produced it.
 

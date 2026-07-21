@@ -1021,8 +1021,18 @@ backends = {
 ```
 
 It uses the same curl transport as the providers, so the key travels on stdin
-(never argv) and it works wherever curl does — Windows included. For an **A2A
-agent** instead:
+(never argv) and it works wherever curl does — Windows included.
+
+> **Reasoning models (GPT-5 family, o-series).** The default request carries
+> only `model`, `messages`, and `stream` — no `temperature`, no `max_tokens` —
+> so a model that rejects a non-default temperature or the legacy token cap
+> works as-is; just set `model`. To cap output on those, use
+> `max_completion_tokens` (the newer name); `max_tokens` is still sent for older
+> endpoints when you set it. `model` is also overridable per request, so a
+> future command can pick a cheaper model for translation and a stronger one for
+> analysis.
+
+For an **A2A agent** instead:
 
 ```lua
 backend = "a2a",

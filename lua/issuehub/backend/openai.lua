@@ -128,9 +128,15 @@ function OpenAI:send(req, opts, cb)
     stream = false,
   }
   -- Only send tuning knobs when set, so a stricter endpoint does not reject an
-  -- explicit null it never asked for.
+  -- explicit null it never asked for — and so a reasoning model (GPT-5 family,
+  -- o-series) that only accepts its default temperature is not handed one.
   payload.temperature = meta.temperature or self.opts.temperature
-  payload.max_tokens = meta.max_tokens or self.opts.max_tokens
+  -- Newer OpenAI models renamed the output cap to `max_completion_tokens` and
+  -- reject the old `max_tokens`; send whichever the caller set, never both.
+  payload.max_completion_tokens = meta.max_completion_tokens or self.opts.max_completion_tokens
+  if not payload.max_completion_tokens then
+    payload.max_tokens = meta.max_tokens or self.opts.max_tokens
+  end
   for key, value in pairs(self.opts.params or {}) do
     payload[key] = value
   end

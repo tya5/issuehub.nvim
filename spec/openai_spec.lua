@@ -119,6 +119,32 @@ describe("openai backend: request shape", function()
     assert.equals("2024-02-01", cap.req.query["api-version"])
   end)
 
+  it("sends nothing but model, messages, and stream by default (GPT-5 safe)", function()
+    -- Reasoning models reject a non-default temperature and the old max_tokens;
+    -- the default request must carry neither.
+    local b, cap = backend_with({ url = "http://x/v1", model = "gpt-5.6" })
+    b:send(REQ, {}, function() end)
+    assert.same({ "messages", "model", "stream" }, (function()
+      local keys = vim.tbl_keys(cap.req.body)
+      table.sort(keys)
+      return keys
+    end)())
+  end)
+
+  it("uses max_completion_tokens and drops the legacy max_tokens", function()
+    local b, cap = backend_with({ url = "http://x/v1", model = "gpt-5.6", max_completion_tokens = 4000 })
+    b:send(REQ, {}, function() end)
+    assert.equals(4000, cap.req.body.max_completion_tokens)
+    assert.is_nil(cap.req.body.max_tokens)
+  end)
+
+  it("still sends legacy max_tokens for an older endpoint that wants it", function()
+    local b, cap = backend_with({ url = "http://x/v1", model = "gpt-4o-mini", max_tokens = 500 })
+    b:send(REQ, {}, function() end)
+    assert.equals(500, cap.req.body.max_tokens)
+    assert.is_nil(cap.req.body.max_completion_tokens)
+  end)
+
   it("lets metadata override the model per request", function()
     local b, cap = backend_with({ url = "http://x/v1", model = "default-model" })
     b:send(vim.tbl_extend("force", REQ, { metadata = { model = "override" } }), {}, function() end)

@@ -615,8 +615,15 @@ corporate gateway, Azure, a local llama.cpp/vLLM/Ollama — use `openai`: >lua
     }
 <
 It rides the same curl transport as the providers, so the key travels on stdin
-(never argv) and it works wherever curl does, Windows included. For an A2A
-agent instead: >lua
+(never argv) and it works wherever curl does, Windows included.
+
+Reasoning models (GPT-5 family, o-series): the default request sends only
+`model`, `messages`, and `stream` — no `temperature`, no `max_tokens` — so a
+model that rejects those works as-is. To cap output, set
+`max_completion_tokens` (the newer name); the legacy `max_tokens` is still
+sent for older endpoints when you set it.
+
+For an A2A agent instead: >lua
     backend = "a2a",
     backends = { a2a = { url = "http://localhost:9100" } },
 <
