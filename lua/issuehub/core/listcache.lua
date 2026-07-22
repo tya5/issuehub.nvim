@@ -76,14 +76,14 @@ end
 ---@param query any
 ---@param uris string[]
 ---@param opts { cursor: any, complete: boolean?, reset: boolean? }?
----@return issuehub.CachedList
+---@return issuehub.CachedList? list  nil on lock contention — callers must check.
+---@return string? err
 function M.merge(provider, query, uris, opts)
   -- A paginated fetch flushes per page; two of them against the same query
   -- would otherwise interleave read-modify-writes and lose whole pages.
-  local list = lock.with("lists", M.key(provider, query), "listcache.merge", function()
+  return lock.with("lists", M.key(provider, query), "listcache.merge", function()
     return M._merge_locked(provider, query, uris, opts)
   end)
-  return list
 end
 
 ---@param provider string

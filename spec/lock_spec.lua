@@ -187,3 +187,74 @@ describe("the optimistic check", function()
     assert.truthy(err:find("deleted", 1, true))
   end)
 end)
+
+-- Self-review regression coverage: every one of these failed silently before
+-- being fixed, because the caller either ignored lock.with's second return
+-- value or (worse, for listcache.merge) trusted a nil first value outright.
+describe("lock contention does not masquerade as a normal no-op", function()
+  before_each(fresh)
+
+  it("workspace.toggle_bookmark: returns the error, not just the unchanged state", function()
+    held_by_other("subject", URI, "cli.workspace.set_state")
+    lock.timeout = 0
+
+    local before = workspace.state(URI).bookmarked
+    local value, err = workspace.toggle_bookmark(URI)
+    assert.equals(before, value) -- unchanged
+    assert.truthy(err) -- ...but the caller can tell it did not actually toggle
+
+    lock.timeout = 10000
+  end)
+
+  it("cache.put_all: reports which provider's batch was skipped", function()
+    held_by_other("cache", "jira", "cli.cache.put_all")
+    lock.timeout = 0
+
+    local cache = require("issuehub.core.cache")
+    local issue_mod = require("issuehub.core.issue")
+    local written, failed = cache.put_all({
+      issue_mod.normalize({ provider = "jira", id = "PROJ-9", title = "x", status = { id = "1", name = "Open" } }),
+    })
+    assert.equals(0, written)
+    assert.truthy(failed)
+    assert.truthy(failed:find("jira", 1, true))
+
+    lock.timeout = 10000
+  end)
+
+  it("listcache.merge: returns nil + err instead of crashing a caller that indexes the result", function()
+    held_by_other("lists", require("issuehub.core.listcache").key("jira", nil), "cli.listcache.merge")
+    lock.timeout = 0
+
+    local list, err = require("issuehub.core.listcache").merge("jira", nil, { "jira://PROJ-1" }, { complete = true })
+    -- The old code returned lock.with's raw result: a bare `nil`, which a
+    -- caller doing `list.uris` would crash on. This is the contract that
+    -- fetch.lua's step() now checks before touching `list`.
+    assert.is_nil(list)
+    assert.truthy(err)
+
+    lock.timeout = 10000
+  end)
+
+  it("collection.add/remove/delete: distinguish contention from a genuine no-op", function()
+    local collection = require("issuehub.core.collection")
+    collection.save({ name = "Sprint A", issues = {} })
+
+    held_by_other("subject", "collection:sprint-a", "cli.collection.add")
+    lock.timeout = 0
+
+    local added, add_err = collection.add("Sprint A", "jira://PROJ-1")
+    assert.is_false(added)
+    assert.truthy(add_err) -- not "was already a member" — the lock was held
+
+    local removed, remove_err = collection.remove("Sprint A", "jira://PROJ-1")
+    assert.is_false(removed)
+    assert.truthy(remove_err) -- not "was not a member"
+
+    local deleted, delete_err = collection.delete("Sprint A")
+    assert.is_false(deleted)
+    assert.truthy(delete_err) -- not "did not exist"
+
+    lock.timeout = 10000
+  end)
+end)

@@ -247,6 +247,20 @@ function M.fetch_all(provider_name, opts)
     local list = listcache.get(name, opts.query)
     local state = run.cancelled and "cancelled" or (list and list.complete and "complete" or "incomplete")
     vim.notify(("issuehub: %s fetch %s — %d issues in %d pages"):format(name, state, run.issues, run.pages))
+
+    if #run.cache_failures > 0 then
+      -- A clean "complete" here would otherwise imply every issue landed on
+      -- disk; some pages were seen but skipped the cache under lock
+      -- contention, which is the one thing "N issues fetched" cannot show.
+      vim.notify(
+        ("issuehub: %s — %d page(s) fetched but not cached (lock contention); re-run to fill them in:\n%s"):format(
+          name,
+          #run.cache_failures,
+          table.concat(run.cache_failures, "\n")
+        ),
+        vim.log.levels.WARN
+      )
+    end
   end)
 end
 
@@ -588,13 +602,21 @@ function M.collection_add(name)
     end
   end
 
-  local added = 0
+  local added, failed = 0, {}
   for _, member in ipairs(uris) do
-    if collections.add(name, member) then
+    local ok, err = collections.add(name, member)
+    if ok then
       added = added + 1
+    elseif err then
+      -- Lock contention, not "already a member" — worth naming, since the
+      -- issue silently did not end up in the collection.
+      failed[#failed + 1] = ("%s: %s"):format(member, err)
     end
   end
   vim.notify(("issuehub: added %d issue(s) to '%s'"):format(added, name))
+  if #failed > 0 then
+    vim.notify("issuehub: could not add — " .. table.concat(failed, "; "), vim.log.levels.WARN)
+  end
 end
 
 ---@param name string
@@ -603,8 +625,11 @@ function M.collection_remove(name)
   if not uri then
     return vim.notify("issuehub: not in an issue buffer", vim.log.levels.WARN)
   end
-  if require("issuehub.core.collection").remove(name, uri) then
+  local ok, err = require("issuehub.core.collection").remove(name, uri)
+  if ok then
     vim.notify(("issuehub: removed %s from '%s'"):format(uri, name))
+  elseif err then
+    vim.notify(("issuehub: could not remove %s from '%s' — %s"):format(uri, name, err), vim.log.levels.ERROR)
   else
     vim.notify(("issuehub: %s is not in '%s'"):format(uri, name), vim.log.levels.WARN)
   end

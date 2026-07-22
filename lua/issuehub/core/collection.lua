@@ -139,11 +139,12 @@ end
 ---@param name string
 ---@param uri string
 ---@return boolean added  false when it was already a member.
+---@return string? err    Set only on lock contention — distinct from "already a member".
 function M.add(name, uri)
-  local added = lock.with("subject", "collection:" .. M.slug(name), "collection.add", function()
+  local added, err = lock.with("subject", "collection:" .. M.slug(name), "collection.add", function()
     return M._add_locked(name, uri)
   end)
-  return added == true
+  return added == true, err
 end
 
 ---@param name string
@@ -164,11 +165,12 @@ end
 ---@param name string
 ---@param uri string
 ---@return boolean removed
+---@return string? err  Set only on lock contention — distinct from "was not a member".
 function M.remove(name, uri)
-  local removed = lock.with("subject", "collection:" .. M.slug(name), "collection.remove", function()
+  local removed, err = lock.with("subject", "collection:" .. M.slug(name), "collection.remove", function()
     return M._remove_locked(name, uri)
   end)
-  return removed == true
+  return removed == true, err
 end
 
 ---@param name string
@@ -192,11 +194,12 @@ end
 
 ---@param name string
 ---@return boolean deleted
+---@return string? err  Set only on lock contention — distinct from "did not exist".
 function M.delete(name)
-  local existed = lock.with("subject", "collection:" .. M.slug(name), "collection.delete", function()
+  local existed, err = lock.with("subject", "collection:" .. M.slug(name), "collection.delete", function()
     return M._delete_locked(name)
   end)
-  return existed == true
+  return existed == true, err
 end
 
 ---@param name string

@@ -140,7 +140,14 @@ local subcommands = {
       issuehub.collection_remove(table.concat(args, " "))
     elseif action == "delete" then
       local name = table.concat(args, " ")
-      vim.notify(collections.delete(name) and ("issuehub: deleted '" .. name .. "'") or "issuehub: no such collection")
+      local ok, err = collections.delete(name)
+      if ok then
+        vim.notify("issuehub: deleted '" .. name .. "'")
+      elseif err then
+        vim.notify("issuehub: could not delete '" .. name .. "' — " .. err, vim.log.levels.ERROR)
+      else
+        vim.notify("issuehub: no such collection")
+      end
     elseif action == "list" then
       local slugs = collections.list()
       vim.notify(#slugs > 0 and ("issuehub collections: " .. table.concat(slugs, ", ")) or "issuehub: no collections")

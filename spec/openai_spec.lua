@@ -62,6 +62,49 @@ describe("openai backend: setup", function()
   end)
 end)
 
+describe("openai backend: an unresolved key does not fail silently", function()
+  it("warns with the actual cause instead of sending unauthenticated", function()
+    -- token_env points at a variable that is not set: configured, but
+    -- unresolvable. The old code checked only `if token then` and swallowed
+    -- the resolver's error, so the request went out with no Authorization
+    -- header and the failure surfaced later as a mystery 401 from the gateway.
+    vim.env.OAI_SPEC_MISSING = nil
+    local b, cap = backend_with({ url = "http://x/v1", model = "m", token_env = "OAI_SPEC_MISSING" })
+
+    local warned
+    local log = require("issuehub.util.log")
+    local original_warn = log.warn
+    log.warn = function(...)
+      warned = table.concat(vim.tbl_map(tostring, { ... }), " ")
+    end
+
+    b:send(REQ, {}, function() end)
+    log.warn = original_warn
+
+    assert.truthy(warned)
+    assert.truthy(warned:find("unresolved", 1, true))
+    assert.is_nil(cap.req.auth)
+  end)
+
+  it("sends nothing and warns nothing when no key is configured at all", function()
+    -- The unset-env case above is "configured but broken"; this is "never
+    -- configured" — an anonymous gateway is a normal setup, not a mistake.
+    local warned = false
+    local log = require("issuehub.util.log")
+    local original_warn = log.warn
+    log.warn = function()
+      warned = true
+    end
+
+    local b, cap = backend_with({ url = "http://x/v1", model = "m" })
+    b:send(REQ, {}, function() end)
+    log.warn = original_warn
+
+    assert.is_false(warned)
+    assert.is_nil(cap.req.auth)
+  end)
+end)
+
 describe("openai backend: request shape", function()
   it("sends the model, a user message built from the request, and no null knobs", function()
     local b, cap = backend_with({ url = "http://x/v1", model = "gpt-4o-mini" })

@@ -8,6 +8,30 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ## [Unreleased]
 
+### Fixed
+
+- **A contended lock could crash a background fetch rather than degrade.**
+  `listcache.merge` returned lock.with's raw result on timeout — a bare `nil`
+  — and `fetch.lua` indexed it unconditionally (`list.uris`). Now `merge`
+  returns `nil, err` explicitly and the fetch loop stops the run cleanly
+  (`:IssueHub fetch resume` picks up from the last persisted page) instead of
+  erroring out of the callback.
+- **`:IssueHub fetch` could report "N issues fetched" while some were never
+  cached.** `cache.put_all` already logged a skipped provider batch on lock
+  contention (from the locking work); the whole-tracker fetch command did not
+  surface it, so a clean "complete" implied every issue landed on disk. It now
+  collects and reports which pages were fetched but not cached.
+- **Lock contention was indistinguishable from a genuine no-op** in three
+  places that all discarded `lock.with`'s error: `workspace.toggle_bookmark`
+  reported the unchanged state with no indication anything failed;
+  `collection.add`/`remove`/`delete` reported "already a member" / "not a
+  member" / "no such collection" when the real cause was a held lock. All four
+  now return (or surface, at the command layer) the actual error.
+- **The OpenAI backend silently sent an unauthenticated request** when a
+  configured token source (`token_env`/`token_cmd`) failed to resolve — a dead
+  command or an unset variable produced a mystery 401 from the gateway with no
+  clue why. Now warned with the resolver's actual error.
+
 ### Added
 
 - **Public API for an agent client** (`require("issuehub").context(uri)` and

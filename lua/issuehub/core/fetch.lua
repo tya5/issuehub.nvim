@@ -19,6 +19,11 @@ local M = {}
 ---@field issues integer
 ---@field cancelled boolean
 ---@field running boolean
+---@field cache_failures string[]  Non-fatal: pages whose cache write was skipped
+---                                 (lock contention). `issues` still counts them,
+---                                 because they WERE fetched — they just are not
+---                                 all on disk, so a run can finish "successfully"
+---                                 while under-reporting what actually got cached.
 
 ---@type table<string, issuehub.FetchRun>
 local running = {}
@@ -84,6 +89,7 @@ function M.all(provider_name, opts, cb)
     issues = resume and #cached.uris or 0,
     cancelled = false,
     running = true,
+    cache_failures = {},
   }
   running[key] = run
 
@@ -103,19 +109,34 @@ function M.all(provider_name, opts, cb)
       end
 
       issues = issues or {}
-      cache.put_all(issues)
+      local _, cache_err = cache.put_all(issues)
+      if cache_err then
+        -- The listcache below still records these URIs as seen — they were
+        -- fetched — but they are not all on disk, so a run that finishes
+        -- cleanly can still be missing entries. Surface it rather than let
+        -- "N issues fetched" imply "N issues cached".
+        run.cache_failures[#run.cache_failures + 1] = ("page %d: %s"):format(run.pages + 1, cache_err)
+      end
 
       local uris = {}
       for _, issue in ipairs(issues) do
         uris[#uris + 1] = issue.uri
       end
 
-      local list = listcache.merge(provider_name, opts.query, uris, {
+      local list, merge_err = listcache.merge(provider_name, opts.query, uris, {
         cursor = next_cursor,
         complete = next_cursor == nil,
         -- A fresh walk replaces the list; a resumed one appends.
         reset = first and not resume,
       })
+      if not list then
+        -- Lock contention on the list cache itself. The cursor from THIS page
+        -- was never persisted, unlike the error path above — stopping here
+        -- (rather than pressing on with a stale run.issues) is what keeps
+        -- `--resume` honest about where it left off.
+        log.warn("fetch: could not persist page", run.pages + 1, "of", provider_name, "—", merge_err)
+        return finish(merge_err)
+      end
 
       run.pages = run.pages + 1
       run.issues = #list.uris

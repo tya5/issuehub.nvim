@@ -104,6 +104,7 @@ end
 --- process per issue, which is what makes a large sync unusable.
 ---@param issues issuehub.Issue[]
 ---@return integer written
+---@return string? failed  Set when at least one provider's batch was skipped (lock contention).
 function M.put_all(issues)
   local stored = {}
   -- One lock for the batch rather than one per issue: a sync writes thousands
