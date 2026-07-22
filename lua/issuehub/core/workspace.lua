@@ -120,12 +120,15 @@ function M.toggle_bookmark(uri)
   -- the lock across both is a toggle that can lose a concurrent one. The lock
   -- is re-entrant, so set_state taking it again inside is free.
   local value
-  lock.with("subject", uri, "workspace.toggle_bookmark", function()
+  local _, err = lock.with("subject", uri, "workspace.toggle_bookmark", function()
     value = not M.state(uri).bookmarked
     M.set_state(uri, { bookmarked = value })
+    return true
   end)
   if value == nil then
-    return M.state(uri).bookmarked
+    -- Nothing toggled. Returning the current state here without the error made
+    -- the command layer announce a toggle that never happened.
+    return M.state(uri).bookmarked, err or "could not toggle"
   end
   require("issuehub.core.index").get():set_bookmark(uri, value)
   return value

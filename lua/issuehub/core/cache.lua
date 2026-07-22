@@ -116,17 +116,26 @@ function M.put_all(issues)
     table.insert(by_provider[provider], issue)
   end
 
+  local failed
   for provider, batch in pairs(by_provider) do
-    lock.with("cache", provider, "cache.put_all", function()
+    local _, err = lock.with("cache", provider, "cache.put_all", function()
       for _, issue in ipairs(batch) do
         if write_entry(issue, true) then
           stored[#stored + 1] = issue
         end
       end
+      return true
     end)
+    if err then
+      -- A locked-out batch must not vanish quietly: the caller believes these
+      -- issues are cached, and every downstream "not cached" symptom would
+      -- point away from the real cause.
+      failed = ("%s: %s"):format(provider, err)
+      require("issuehub.util.log").warn("cache.put_all skipped a batch —", failed)
+    end
   end
   require("issuehub.core.index").get():put_many(stored)
-  return #stored
+  return #stored, failed
 end
 
 ---@param uri string

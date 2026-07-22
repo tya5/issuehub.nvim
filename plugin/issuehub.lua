@@ -193,7 +193,10 @@ local subcommands = {
     if not uri then
       return vim.notify("issuehub: not in an issue buffer", vim.log.levels.WARN)
     end
-    local on = require("issuehub.core.workspace").toggle_bookmark(uri)
+    local on, terr = require("issuehub.core.workspace").toggle_bookmark(uri)
+    if terr then
+      return vim.notify("issuehub: bookmark not toggled — " .. terr, vim.log.levels.ERROR)
+    end
     vim.notify(("issuehub: %s %s"):format(on and "bookmarked" or "un-bookmarked", uri))
   end,
 

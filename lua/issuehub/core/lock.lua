@@ -152,13 +152,16 @@ function M.acquire(kind, name, operation, opts)
     operation = operation,
   })
 
+  -- uv.now() is the cached loop time; without a refresh the deadline can be
+  -- computed from a stamp taken before a long busy stretch.
+  vim.uv.update_time()
   local deadline = vim.uv.now() + (opts.timeout or M.timeout)
   while true do
     local fd, _, errname = vim.uv.fs_open(path, "wx", 420)
     if fd then
       vim.uv.fs_write(fd, payload)
       vim.uv.fs_close(fd)
-      held[path] = { count = 1, fd = fd }
+      held[path] = { count = 1 }
       return { path = path }
     end
 
@@ -176,7 +179,16 @@ function M.acquire(kind, name, operation, opts)
     if vim.uv.now() >= deadline then
       return nil, ("%s is locked by another process — %s"):format(name, describe_owner(path))
     end
-    vim.uv.sleep(M.poll)
+    -- vim.wait keeps the event loop alive while we poll — redraws, timers, and
+    -- LSP keep running. uv.sleep would freeze the whole editor for up to the
+    -- full timeout on a contended lock, which is exactly the kind of stall
+    -- this plugin promises not to cause; it remains only as the fallback for
+    -- fast-event contexts, where vim.wait is not allowed.
+    if vim.in_fast_event() then
+      vim.uv.sleep(M.poll)
+    else
+      vim.wait(M.poll)
+    end
     vim.uv.update_time()
   end
 end

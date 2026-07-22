@@ -73,7 +73,7 @@ function OpenAI:_credentials()
   local headers = { ["Content-Type"] = "application/json" }
   local auth = nil
 
-  local token = config.secret(self.opts, "token", "backends." .. self.name)
+  local token, terr = config.secret(self.opts, "token", "backends." .. self.name)
   if token then
     if self.opts.api_key_header then
       -- Azure and some gateways use a named key header (e.g. "api-key") rather
@@ -82,6 +82,11 @@ function OpenAI:_credentials()
     else
       auth = { bearer = token }
     end
+  elseif self.opts.token or self.opts.token_cmd or self.opts.token_env then
+    -- A key was configured but did not resolve (dead command, unset env).
+    -- Sending the request unauthenticated anyway turns that into a mystery 401
+    -- from the gateway; the warning names the actual cause.
+    log.warn("openai: api key configured but unresolved —", terr)
   end
 
   -- Passthrough for anything the endpoint needs that this backend does not model
