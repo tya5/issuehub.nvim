@@ -220,6 +220,22 @@ function M.fetch_all(provider_name, opts)
 
   vim.notify(("issuehub: fetching all of %s in the background… (`:IssueHub fetch stop` to stop)"):format(name))
 
+  -- Shared by both the clean-finish and the stopped-early paths: a run that
+  -- stops midway can still have fetched pages it never managed to cache, and
+  -- that is exactly as worth surfacing as it is on a run that finishes clean.
+  local function report_cache_failures(run)
+    if run and run.cache_failures and #run.cache_failures > 0 then
+      vim.notify(
+        ("issuehub: %s — %d page(s) fetched but not cached (lock contention); re-run to fill them in:\n%s"):format(
+          name,
+          #run.cache_failures,
+          table.concat(run.cache_failures, "\n")
+        ),
+        vim.log.levels.WARN
+      )
+    end
+  end
+
   local last_report = 0
   fetch.all(name, {
     query = opts.query,
@@ -235,32 +251,21 @@ function M.fetch_all(provider_name, opts)
     end,
   }, function(err, run)
     if err then
-      return vim.notify(
+      vim.notify(
         ("issuehub: fetch stopped after %d issues — %s (`:IssueHub fetch resume` continues)"):format(
           run and run.issues or 0,
           err
         ),
         vim.log.levels.WARN
       )
+      return report_cache_failures(run)
     end
 
     local list = listcache.get(name, opts.query)
     local state = run.cancelled and "cancelled" or (list and list.complete and "complete" or "incomplete")
     vim.notify(("issuehub: %s fetch %s — %d issues in %d pages"):format(name, state, run.issues, run.pages))
 
-    if #run.cache_failures > 0 then
-      -- A clean "complete" here would otherwise imply every issue landed on
-      -- disk; some pages were seen but skipped the cache under lock
-      -- contention, which is the one thing "N issues fetched" cannot show.
-      vim.notify(
-        ("issuehub: %s — %d page(s) fetched but not cached (lock contention); re-run to fill them in:\n%s"):format(
-          name,
-          #run.cache_failures,
-          table.concat(run.cache_failures, "\n")
-        ),
-        vim.log.levels.WARN
-      )
-    end
+    report_cache_failures(run)
   end)
 end
 

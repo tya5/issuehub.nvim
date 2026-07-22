@@ -99,31 +99,35 @@ describe("lock files", function()
 end)
 
 describe("writes take their lock", function()
-  before_each(fresh)
+  local saved_timeout
+  before_each(function()
+    fresh()
+    -- Restored in after_each rather than at the end of each `it`, so a failed
+    -- assert above it does not leak timeout=0 into every test that follows.
+    saved_timeout = lock.timeout
+    lock.timeout = 0
+  end)
+  after_each(function()
+    lock.timeout = saved_timeout
+  end)
 
   it("blocks an overlay write while another process holds the subject", function()
     held_by_other("subject", URI, "cli.overlay.write")
-    lock.timeout = 0
 
     local written, err = overlay.write(URI, { memo = "mine" })
     assert.same({}, written)
     assert.truthy(err:find("locked by another process", 1, true))
     -- Refused, not merged and not overwritten.
     assert.equals("", overlay.read(URI).memo)
-
-    lock.timeout = 10000
   end)
 
   it("blocks a state write the same way", function()
     held_by_other("subject", URI, "cli.workspace.set_state")
-    lock.timeout = 0
 
     local ok, err = workspace.set_state(URI, { bookmarked = true })
     assert.is_false(ok)
     assert.truthy(err:find("locked by another process", 1, true))
     assert.is_false(workspace.state(URI).bookmarked)
-
-    lock.timeout = 10000
   end)
 
   it("takes the provider directory lock for a cache write, not a per-issue one", function()
@@ -131,7 +135,6 @@ describe("writes take their lock", function()
     -- case-insensitive filesystem, so a per-issue lock would leave the two
     -- racing writers locking two different names and serialising nothing.
     held_by_other("cache", "jira", "cli.cache.put")
-    lock.timeout = 0
 
     local ok, err = require("issuehub.core.cache").put(require("issuehub.core.issue").normalize({
       provider = "jira",
@@ -141,8 +144,6 @@ describe("writes take their lock", function()
     }))
     assert.is_false(ok)
     assert.truthy(err:find("locked by another process", 1, true))
-
-    lock.timeout = 10000
   end)
 end)
 
@@ -192,23 +193,27 @@ end)
 -- being fixed, because the caller either ignored lock.with's second return
 -- value or (worse, for listcache.merge) trusted a nil first value outright.
 describe("lock contention does not masquerade as a normal no-op", function()
-  before_each(fresh)
+  local saved_timeout
+  before_each(function()
+    fresh()
+    saved_timeout = lock.timeout
+    lock.timeout = 0
+  end)
+  after_each(function()
+    lock.timeout = saved_timeout
+  end)
 
   it("workspace.toggle_bookmark: returns the error, not just the unchanged state", function()
     held_by_other("subject", URI, "cli.workspace.set_state")
-    lock.timeout = 0
 
     local before = workspace.state(URI).bookmarked
     local value, err = workspace.toggle_bookmark(URI)
     assert.equals(before, value) -- unchanged
     assert.truthy(err) -- ...but the caller can tell it did not actually toggle
-
-    lock.timeout = 10000
   end)
 
   it("cache.put_all: reports which provider's batch was skipped", function()
     held_by_other("cache", "jira", "cli.cache.put_all")
-    lock.timeout = 0
 
     local cache = require("issuehub.core.cache")
     local issue_mod = require("issuehub.core.issue")
@@ -218,13 +223,10 @@ describe("lock contention does not masquerade as a normal no-op", function()
     assert.equals(0, written)
     assert.truthy(failed)
     assert.truthy(failed:find("jira", 1, true))
-
-    lock.timeout = 10000
   end)
 
   it("listcache.merge: returns nil + err instead of crashing a caller that indexes the result", function()
     held_by_other("lists", require("issuehub.core.listcache").key("jira", nil), "cli.listcache.merge")
-    lock.timeout = 0
 
     local list, err = require("issuehub.core.listcache").merge("jira", nil, { "jira://PROJ-1" }, { complete = true })
     -- The old code returned lock.with's raw result: a bare `nil`, which a
@@ -232,16 +234,15 @@ describe("lock contention does not masquerade as a normal no-op", function()
     -- fetch.lua's step() now checks before touching `list`.
     assert.is_nil(list)
     assert.truthy(err)
-
-    lock.timeout = 10000
   end)
 
   it("collection.add/remove/delete: distinguish contention from a genuine no-op", function()
     local collection = require("issuehub.core.collection")
+    -- Not yet contended: this save must succeed even with lock.timeout = 0,
+    -- since timeout only matters once a lock is actually held elsewhere.
     collection.save({ name = "Sprint A", issues = {} })
 
     held_by_other("subject", "collection:sprint-a", "cli.collection.add")
-    lock.timeout = 0
 
     local added, add_err = collection.add("Sprint A", "jira://PROJ-1")
     assert.is_false(added)
@@ -254,7 +255,5 @@ describe("lock contention does not masquerade as a normal no-op", function()
     local deleted, delete_err = collection.delete("Sprint A")
     assert.is_false(deleted)
     assert.truthy(delete_err) -- not "did not exist"
-
-    lock.timeout = 10000
   end)
 end)

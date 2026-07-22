@@ -7,7 +7,7 @@
 vim.opt.runtimepath:prepend(vim.fn.getcwd())
 
 local passed, failed, failures = 0, 0, {}
-local stack, before_stack = {}, {}
+local stack, before_stack, after_stack = {}, {}, {}
 
 local function deep_equal(a, b)
   if a == b then
@@ -71,13 +71,24 @@ _G.assert = setmetatable({
 function _G.describe(name, fn)
   table.insert(stack, name)
   table.insert(before_stack, {})
+  table.insert(after_stack, {})
   fn()
+  table.remove(after_stack)
   table.remove(before_stack)
   table.remove(stack)
 end
 
 function _G.before_each(fn)
   table.insert(before_stack[#before_stack], fn)
+end
+
+---Matches busted: runs after the test body regardless of pass/fail, so a spec
+---can restore shared/global state (e.g. a module-level default it flips for one
+---test) without one failed assert leaking that state into every test after it.
+---Innermost-registered group runs first, mirroring before_each's outer-to-inner
+---order in reverse.
+function _G.after_each(fn)
+  table.insert(after_stack[#after_stack], fn)
 end
 
 function _G.it(name, fn)
@@ -90,6 +101,19 @@ function _G.it(name, fn)
     end
     fn()
   end)
+
+  -- Run after_each even when the test failed — that is the entire point of an
+  -- after_each restore. Run innermost-group-first; an after hook erroring is
+  -- reported but does not swallow the test's own pass/fail result.
+  for i = #after_stack, 1, -1 do
+    for _, hook in ipairs(after_stack[i]) do
+      local hook_ok, hook_err = pcall(hook)
+      if not hook_ok then
+        io.write(("  WARN after_each hook failed for %s: %s\n"):format(label, tostring(hook_err)))
+      end
+    end
+  end
+
   if ok then
     passed = passed + 1
     io.write("  ok   " .. label .. "\n")

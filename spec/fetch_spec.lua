@@ -3,6 +3,23 @@ local issue_mod = require("issuehub.core.issue")
 local listcache = require("issuehub.core.listcache")
 local fetch = require("issuehub.core.fetch")
 local providers = require("issuehub.provider")
+local lock = require("issuehub.core.lock")
+local fs = require("issuehub.util.fs")
+
+---Simulate another process holding a lock, by writing the file directly.
+---`lock.acquire` is re-entrant WITHIN a process (keyed by path in memory), so
+---acquiring it from the spec itself would not contend with fetch's own
+---in-process acquire — writing straight to disk is what actually forces the
+---code under test into the EEXIST path.
+local function held_by_other(kind, name)
+  local path = assert(lock.path(kind, name))
+  fs.mkdirp(vim.fs.dirname(path))
+  fs.write(
+    path,
+    vim.json.encode({ pid = 999999, hostname = "some-other-host", acquired_at = "2026-07-01T00:00:00Z", operation = "spec" })
+  )
+  return path
+end
 
 ---A provider serving `total` issues in pages of `per_page`, recording calls.
 local function paged_provider(total, per_page, opts)
@@ -168,6 +185,49 @@ describe("fetch.all", function()
     fresh(paged_provider(1000, 100))
     local result = run({ max = 250 })
     assert.truthy(result.issues >= 250 and result.issues < 400)
+  end)
+
+  it("reports pages fetched but not cached, rather than a silent 'complete'", function()
+    -- Simulates another process holding the provider's cache lock: cache.put_all
+    -- fails for every page, but the walk itself (paging + listcache) still
+    -- succeeds, so a run that finishes "complete" can still be missing every
+    -- issue from disk. That gap is exactly what run.cache_failures exists to
+    -- surface — this pins it does not silently vanish.
+    fresh(paged_provider(150, 100))
+    local saved = lock.timeout
+    lock.timeout = 0
+    local path = held_by_other("cache", "demo")
+
+    local result = run()
+    vim.uv.fs_unlink(path)
+    lock.timeout = saved
+
+    assert.equals(150, result.issues) -- seen, via the listcache walk
+    assert.equals(2, #result.cache_failures) -- ...but neither page landed on disk
+    assert.is_nil(require("issuehub.core.cache").get("demo://D-1"))
+  end)
+
+  it("stops the run cleanly (not a crash) when the list cache itself is locked", function()
+    -- Before this was fixed, listcache.merge returned lock.with's raw nil on
+    -- contention and fetch.lua indexed it unconditionally (`list.uris`) —
+    -- a contended list-cache lock during a real fetch would throw instead of
+    -- degrading. This is the fetch.lua-level guard for that crash: it is held
+    -- from before the run starts, so the very first page's merge fails and
+    -- `run.pages` is never incremented past 0 — pages only count once their
+    -- list write actually lands, which is what keeps `--resume` honest.
+    fresh(paged_provider(150, 100))
+    local saved = lock.timeout
+    lock.timeout = 0
+    local path = held_by_other("lists", listcache.key("demo", nil))
+
+    local result, err = run()
+    vim.uv.fs_unlink(path)
+    lock.timeout = saved
+
+    assert.truthy(err)
+    assert.truthy(err:find("locked by another process", 1, true))
+    -- Did not crash indexing a nil list, and did not count an uncached page.
+    assert.equals(0, result.pages)
   end)
 end)
 

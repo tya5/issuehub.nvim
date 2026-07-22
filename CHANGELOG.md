@@ -10,6 +10,26 @@ This project is pre-1.0: the public API may break between minor versions until
 
 ### Fixed
 
+- **A fresh lock directory could spuriously report "locked by another
+  process."** `lock.acquire`'s ENOENT branch (the lock directory not existing
+  yet — normal for the very first acquisition under a kind) created the
+  directory but then fell through to the same deadline/poll check as a genuine
+  EEXIST, so a short timeout (or, less visibly, the first acquisition under the
+  default timeout) could misreport contention that never existed. Found while
+  adding a regression spec for the fetch/lock work below — reproduced with a
+  single, completely uncontended `listcache.merge` call. Only the genuine
+  EEXIST branch now consults the deadline or polls; ENOENT retries immediately
+  in the same iteration.
+- **A background fetch stopping early on list-cache lock contention did not
+  report which pages were fetched but never cached.** `M.fetch_all`'s
+  error-notification path ignored `run.cache_failures` entirely; both the
+  clean-finish and the stopped-early paths now share one report.
+- **`collection.add`/`remove` reported success even when the write to disk
+  failed.** `M._add_locked`/`_remove_locked` ignored `M.save`'s own return
+  value and always reported the membership change as applied. They now
+  propagate the write error, distinguishable from the genuine "already a
+  member" / "was not a member" no-op.
+
 - **A contended lock could crash a background fetch rather than degrade.**
   `listcache.merge` returned lock.with's raw result on timeout — a bare `nil`
   — and `fetch.lua` indexed it unconditionally (`list.uris`). Now `merge`

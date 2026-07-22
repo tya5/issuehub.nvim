@@ -167,29 +167,39 @@ function M.acquire(kind, name, operation, opts)
 
     if errname == "ENOENT" then
       -- `.state/` is derived and deletable at any moment; recreating it is
-      -- ordinary, not an error.
+      -- ordinary, not an error — and NOT contention. Retry fs_open immediately
+      -- in this same iteration: falling through to the deadline/poll check
+      -- below would treat "the directory didn't exist yet" as if it were a
+      -- held lock, which is a different bug (the very first acquisition in a
+      -- fresh workspace would spuriously report "locked by another process"
+      -- under a short timeout, and silently eat one poll interval even under
+      -- the default one). Found by a test using timeout=0 against a lock
+      -- whose directory had never been created — reproduced with a single,
+      -- uncontended listcache.merge call and nothing else running.
       local ok = fs.mkdirp(vim.fs.dirname(path))
       if not ok then
         return nil, ("could not create the lock directory for %s"):format(path)
       end
     elseif errname ~= "EEXIST" then
       return nil, ("could not take the lock %s: %s"):format(path, tostring(errname))
-    end
-
-    if vim.uv.now() >= deadline then
-      return nil, ("%s is locked by another process — %s"):format(name, describe_owner(path))
-    end
-    -- vim.wait keeps the event loop alive while we poll — redraws, timers, and
-    -- LSP keep running. uv.sleep would freeze the whole editor for up to the
-    -- full timeout on a contended lock, which is exactly the kind of stall
-    -- this plugin promises not to cause; it remains only as the fallback for
-    -- fast-event contexts, where vim.wait is not allowed.
-    if vim.in_fast_event() then
-      vim.uv.sleep(M.poll)
     else
-      vim.wait(M.poll)
+      -- Genuine contention: another writer holds the file. Only THIS branch
+      -- may give up on timeout or consume a poll interval.
+      if vim.uv.now() >= deadline then
+        return nil, ("%s is locked by another process — %s"):format(name, describe_owner(path))
+      end
+      -- vim.wait keeps the event loop alive while we poll — redraws, timers,
+      -- and LSP keep running. uv.sleep would freeze the whole editor for up to
+      -- the full timeout on a contended lock, which is exactly the kind of
+      -- stall this plugin promises not to cause; it remains only as the
+      -- fallback for fast-event contexts, where vim.wait is not allowed.
+      if vim.in_fast_event() then
+        vim.uv.sleep(M.poll)
+      else
+        vim.wait(M.poll)
+      end
+      vim.uv.update_time()
     end
-    vim.uv.update_time()
   end
 end
 

@@ -139,7 +139,7 @@ end
 ---@param name string
 ---@param uri string
 ---@return boolean added  false when it was already a member.
----@return string? err    Set only on lock contention — distinct from "already a member".
+---@return string? err    Lock contention OR a disk-write failure — distinct from "already a member".
 function M.add(name, uri)
   local added, err = lock.with("subject", "collection:" .. M.slug(name), "collection.add", function()
     return M._add_locked(name, uri)
@@ -150,6 +150,8 @@ end
 ---@param name string
 ---@param uri string
 ---@return boolean added
+---@return string? err  Set when `M.save` itself failed (disk write) — the
+---                      membership change did not actually persist.
 function M._add_locked(name, uri)
   local collection = M.get(name) or { name = name, slug = M.slug(name), issues = {} }
   if vim.tbl_contains(collection.issues, uri) then
@@ -158,14 +160,20 @@ function M._add_locked(name, uri)
   collection.issues[#collection.issues + 1] = uri
   -- Sorted so a collection edited from two machines diffs cleanly.
   table.sort(collection.issues)
-  M.save(collection)
+  local ok, serr = M.save(collection)
+  if not ok then
+    -- Without this, a failed write to disk still reported "added" — the
+    -- caller believed the issue was in the collection when nothing was
+    -- ever persisted.
+    return false, serr
+  end
   return true
 end
 
 ---@param name string
 ---@param uri string
 ---@return boolean removed
----@return string? err  Set only on lock contention — distinct from "was not a member".
+---@return string? err  Lock contention OR a disk-write failure — distinct from "was not a member".
 function M.remove(name, uri)
   local removed, err = lock.with("subject", "collection:" .. M.slug(name), "collection.remove", function()
     return M._remove_locked(name, uri)
@@ -176,6 +184,7 @@ end
 ---@param name string
 ---@param uri string
 ---@return boolean removed
+---@return string? err  Set when `M.save` itself failed (disk write).
 function M._remove_locked(name, uri)
   local collection = M.get(name)
   if not collection then
@@ -188,7 +197,10 @@ function M._remove_locked(name, uri)
     return false
   end
   collection.issues = kept
-  M.save(collection)
+  local ok, serr = M.save(collection)
+  if not ok then
+    return false, serr
+  end
   return true
 end
 
